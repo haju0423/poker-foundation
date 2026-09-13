@@ -1,7 +1,7 @@
 {
   "name": "Poker.Editor",
   "rootNamespace": "Poker.Editor",
-  "references": ["Poker.Runtime"],
+  "references": ["Poker.Runtime", "Poker.Core"],
   "includePlatforms": ["Editor"],
   "autoReferenced": true
 }

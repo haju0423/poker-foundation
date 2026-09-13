@@ -7,13 +7,17 @@ namespace Poker.Application
     /// <summary>A small, stateless practice policy. Thresholds are tuning values, not win probabilities.</summary>
     public sealed class RuleBasedDrawOpponent : IPokerOpponent
     {
-        private const decimal BeforeDrawHighCardCallLimit = 0.34m;
-        private const decimal AfterDrawHighCardCallLimit = 0.20m;
-        private const decimal BeforeDrawPairCallLimit = 0.45m;
-        private const decimal AfterDrawPairCallLimit = 0.35m;
-        private const decimal TwoPairCallLimit = 0.50m;
-        private const decimal RaiseBankrollShare = 0.35m;
+        private readonly PracticeOpponentSettings settings;
+        private readonly int variationSeed;
         private readonly SimpleDrawOpponent exchangePolicy = new SimpleDrawOpponent();
+
+        public RuleBasedDrawOpponent() : this(PracticeOpponentSettings.Default) { }
+
+        public RuleBasedDrawOpponent(PracticeOpponentSettings settings, int variationSeed = 0)
+        {
+            this.settings = settings ?? throw new ArgumentNullException(nameof(settings));
+            this.variationSeed = variationSeed;
+        }
 
         public HandCommand Choose(PokerPlayerView view)
         {
@@ -23,15 +27,19 @@ namespace Poker.Application
             PlayerBettingOptions legal = view.Betting;
             if (legal == null) throw new InvalidOperationException("No legal betting turn.");
 
+            HandCategory category = HandEvaluator.Evaluate(view.OwnCards).Category;
             BettingAction action;
             if (legal.CanCheck)
             {
-                // Preserve the check-through path while adding responses to a player's wager.
-                action = BettingAction.Check();
+                bool wantsAggression = category >= HandCategory.TwoPair || WantsBluff(view, category);
+                long? target = wantsAggression ? PokerBetSizing.HalfPotTarget(view) : null;
+                // If even this modest size exceeds the budget, check. Never clamp below the legal minimum.
+                action = target.HasValue && target.Value <= AggressionBudget(view)
+                    ? (legal.CanBet ? BettingAction.BetTo(target.Value) : BettingAction.RaiseTo(target.Value))
+                    : BettingAction.Check();
             }
             else
             {
-                HandCategory category = HandEvaluator.Evaluate(view.OwnCards).Category;
                 decimal price = legal.CanCall
                     ? (decimal)legal.CallAmount / ((decimal)view.PotAmount + legal.CallAmount)
                     : 0m;
@@ -49,28 +57,34 @@ namespace Poker.Application
             return HandCommand.Bet(view.HandId, Guid.NewGuid(), view.ViewerSeat, view.Version, action);
         }
 
-        private static decimal CallLimit(HandCategory category, HandPhase phase)
+        private decimal CallLimit(HandCategory category, HandPhase phase)
         {
             bool beforeDraw = phase == HandPhase.FirstBetting;
             switch (category)
             {
                 case HandCategory.HighCard:
-                    return beforeDraw ? BeforeDrawHighCardCallLimit : AfterDrawHighCardCallLimit;
+                    return beforeDraw ? settings.BeforeDrawHighCardCallLimit : settings.AfterDrawHighCardCallLimit;
                 case HandCategory.OnePair:
-                    return beforeDraw ? BeforeDrawPairCallLimit : AfterDrawPairCallLimit;
+                    return beforeDraw ? settings.BeforeDrawPairCallLimit : settings.AfterDrawPairCallLimit;
                 case HandCategory.TwoPair:
-                    return TwoPairCallLimit;
+                    return settings.TwoPairCallLimit;
                 default:
                     return 1m;
             }
         }
 
-        private static bool CanAffordMinimumRaise(PokerPlayerView view, PlayerBettingOptions legal)
+        private bool CanAffordMinimumRaise(PokerPlayerView view, PlayerBettingOptions legal)
         {
             if (!legal.CanRaise || !legal.MinimumAggressiveTarget.HasValue ||
                 !legal.MaximumAggressiveTarget.HasValue)
                 return false;
 
+            long minimum = legal.MinimumAggressiveTarget.Value;
+            return minimum > 0 && minimum <= legal.MaximumAggressiveTarget.Value && minimum <= AggressionBudget(view);
+        }
+
+        private long AggressionBudget(PokerPlayerView view)
+        {
             foreach (PublicSeatView seat in view.Seats)
             {
                 if (seat.Seat != view.ViewerSeat) continue;
@@ -79,11 +93,36 @@ namespace Poker.Application
                 // This amount stays fixed during the street. Do not reset the budget on each re-raise.
                 // Convert before adding so even a valid Int64-sized table remains safe.
                 decimal streetBankroll = (decimal)seat.Stack + seat.StreetContribution.Value;
-                long minimum = legal.MinimumAggressiveTarget.Value;
-                return minimum > 0 && minimum <= legal.MaximumAggressiveTarget.Value &&
-                    minimum <= decimal.Floor(streetBankroll * RaiseBankrollShare);
+                return (long)decimal.Floor(streetBankroll * settings.AggressionBankrollShare);
             }
             throw new InvalidOperationException("The acting seat is missing from its view.");
+        }
+
+        private bool WantsBluff(PokerPlayerView view, HandCategory category)
+        {
+            if (category != HandCategory.HighCard || view.Phase != HandPhase.SecondBetting
+                || !view.Betting.CanBet || settings.AfterDrawBluffPercent == 0) return false;
+            int remaining = 0;
+            foreach (PublicSeatView seat in view.Seats) if (!seat.IsFolded) remaining++;
+            return remaining == 2 && RollPercent(view) < settings.AfterDrawBluffPercent;
+        }
+
+        // Explicit, stateless non-cryptographic variation. It never reads/depletes the deck RNG.
+        // This is reproducibility, not a fairness guarantee or a secret strategy seed.
+        private int RollPercent(PokerPlayerView view)
+        {
+            unchecked
+            {
+                uint hash = 2166136261u ^ (uint)variationSeed;
+                foreach (byte value in view.HandId.ToByteArray()) hash = (hash ^ value) * 16777619u;
+                uint seat = (uint)view.ViewerSeat.Value;
+                for (int i = 0; i < 4; i++) { hash = (hash ^ (byte)seat) * 16777619u; seat >>= 8; }
+                ulong version = (ulong)view.Version;
+                for (int i = 0; i < 8; i++) { hash = (hash ^ (byte)version) * 16777619u; version >>= 8; }
+                hash ^= hash >> 16; hash *= 0x85ebca6bu;
+                hash ^= hash >> 13; hash *= 0xc2b2ae35u; hash ^= hash >> 16;
+                return (int)(hash % 100u);
+            }
         }
     }
 }

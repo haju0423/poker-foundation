@@ -43,7 +43,9 @@ namespace Poker.Editor
             AssetDatabase.SaveAssets();
             Debug.Log("POKER_PRACTICE_SCENE_READY");
         }
-        public static void Build()
+        public static void Build() => BuildPlayer(BuildOptions.None);
+        public static void BuildSmoke() => BuildPlayer(BuildOptions.Development);
+        private static void BuildPlayer(BuildOptions options)
         {
             Create();
             ValidateSavedScene();
@@ -56,7 +58,7 @@ namespace Poker.Editor
             BuildReport report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
             {
                 scenes = new[] { ScenePath }, locationPathName = path,
-                target = BuildTarget.StandaloneOSX, options = BuildOptions.None
+                target = BuildTarget.StandaloneOSX, options = options
             });
             if (report.summary.result != BuildResult.Succeeded) throw new InvalidOperationException("Practice build failed.");
             File.Copy("Assets/Poker/Resources/Fonts/OFL.txt", Path.Combine(Path.GetDirectoryName(path), "FONT-LICENSE.txt"), true);
@@ -87,6 +89,13 @@ namespace Poker.Editor
             var bootstrap = doc == null ? null : doc.GetComponent<PracticeTableBootstrap>();
             if (doc == null || doc.panelSettings == null || doc.panelSettings.themeStyleSheet == null || bootstrap == null || bootstrap.Settings == null)
                 throw new InvalidOperationException("Saved practice scene has missing UI/settings references; build stopped.");
+            // Validate the saved fixture and resources before producing a Player that cannot start its screen.
+            bootstrap.Settings.CreateSetup();
+            float delay = bootstrap.Settings.opponentDelaySeconds;
+            if (float.IsNaN(delay) || float.IsInfinity(delay))
+                throw new InvalidOperationException("Saved practice delay must be finite; build stopped.");
+            if (Resources.Load<StyleSheet>("PokerTable") == null || Resources.Load<Font>("Fonts/NanumGothic-Regular") == null)
+                throw new InvalidOperationException("Required poker style/font resource is missing; build stopped.");
         }
         private static string Argument(string key)
         {

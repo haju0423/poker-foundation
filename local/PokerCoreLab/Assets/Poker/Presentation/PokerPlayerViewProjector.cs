@@ -40,7 +40,9 @@ namespace Poker.Presentation
             return new PokerPlayerView(session.HandId, version, authorizedViewer, state.Phase, state.CurrentSeat,
                 ownCards, seats, state.Ledger.TotalCommitted, betting?.CurrentBet,
                 ownTurn && betting != null ? new PlayerBettingOptions(betting.GetLegalActions()) : null,
-                canExchange, canExchange ? ExchangeRound.MaxExchangeCount : 0, state.Settlement?.TotalAwarded);
+                canExchange, canExchange ? ExchangeRound.MaxExchangeCount : 0, state.Settlement?.TotalAwarded,
+                session.LastTransition.HasValue ? new PublicHandTransition(session.LastTransition.Value) : (PublicHandTransition?)null,
+                state.IsComplete ? PokerHandResultProjector.Create(session, authorizedViewer) : null);
         }
     }
 }

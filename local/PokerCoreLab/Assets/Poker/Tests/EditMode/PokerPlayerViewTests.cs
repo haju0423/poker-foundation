@@ -165,6 +165,9 @@ namespace Poker.Foundation.Tests
             {
                 var view = View(session, viewer);
                 Assert.That(view.Phase, Is.EqualTo(HandPhase.AwaitingSettlementRule));
+                Assert.That(view.Result, Is.Null);
+                Assert.That(view.LastTransition.Value.AfterPhase, Is.EqualTo(HandPhase.AwaitingSettlementRule));
+                Assert.Throws<InvalidOperationException>(() => PokerHandResultProjector.Create(session, viewer));
                 Assert.That(view.PotAmount, Is.EqualTo(5)); Assert.That(view.TotalAwarded, Is.Null);
                 Assert.That(view.CurrentSeat, Is.Null); Assert.That(view.Betting, Is.Null); Assert.That(view.CanExchange, Is.False);
                 Assert.That(view.Seats.All(s => s.Awarded == null), Is.True);
@@ -177,6 +180,8 @@ namespace Poker.Foundation.Tests
         {
             var session = Tie(true); FinishTie(session); var view = View(session, C);
             Assert.That(view.Phase, Is.EqualTo(HandPhase.Complete)); Assert.That(view.TotalAwarded, Is.EqualTo(5));
+            Assert.That(view.Result.Pots.Single().Payouts.Single(p => p.Seat == A).HasOddChip, Is.True);
+            Assert.That(view.Result.Pots.Single().Payouts.Single(p => p.Seat == A).Amount, Is.EqualTo(3));
             Assert.That(view.PotAmount, Is.Zero); Assert.That(view.Seats.Sum(s => s.Committed), Is.Zero);
             Assert.That(view.Seats.Single(s => s.Seat == A).Awarded, Is.EqualTo(3));
             Assert.That(view.Seats.Single(s => s.Seat == B).Awarded, Is.EqualTo(2));
@@ -243,11 +248,11 @@ namespace Poker.Foundation.Tests
         [Test]
         public void PublicAndPrivateFieldSurfaceContainsOnlyTheDeclaredViewContract()
         {
-            AssertSurface(typeof(PokerPlayerView), "HandId Version ViewerSeat Phase CurrentSeat IsOwnTurn OwnCards Seats PotAmount CurrentBet Betting CanExchange MaxExchangeCount TotalAwarded");
+            AssertSurface(typeof(PokerPlayerView), "HandId Version ViewerSeat Phase CurrentSeat IsOwnTurn OwnCards Seats PotAmount CurrentBet Betting CanExchange MaxExchangeCount TotalAwarded LastTransition Result");
             AssertSurface(typeof(PublicSeatView), "Seat Stack Committed StreetContribution IsFolded IsAllIn Awarded");
             AssertSurface(typeof(PlayerBettingOptions), "CanFold CanCheck CanCall CallAmount CanBet CanRaise MinimumAggressiveTarget MaximumAggressiveTarget");
             var allowed = new HashSet<Type> { typeof(Guid), typeof(long), typeof(long?), typeof(SeatId), typeof(SeatId?),
-                typeof(HandPhase), typeof(bool), typeof(int), typeof(IReadOnlyList<Card>), typeof(IReadOnlyList<PublicSeatView>), typeof(PlayerBettingOptions) };
+                typeof(HandPhase), typeof(bool), typeof(int), typeof(IReadOnlyList<Card>), typeof(IReadOnlyList<PublicSeatView>), typeof(PlayerBettingOptions), typeof(PublicHandTransition?), typeof(PokerHandResultView) };
             foreach (Type type in new[] { typeof(PokerPlayerView), typeof(PublicSeatView), typeof(PlayerBettingOptions) })
             {
                 Assert.That(type.GetConstructors(), Is.Empty);

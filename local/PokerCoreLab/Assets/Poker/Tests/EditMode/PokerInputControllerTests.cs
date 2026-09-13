@@ -123,6 +123,89 @@ namespace Poker.Foundation.Tests
             port.Callback = () => Assert.That(input.Bet(BettingAction.Call()), Is.False);
             input.Bet(BettingAction.Call()); Assert.That(port.Commands, Has.Count.EqualTo(1));
         }
+        [TestCase(false)]
+        [TestCase(true)]
+        public void RetryDuringActiveDispatchDoesNotRecursivelyResubmit(bool duringRead)
+        {
+            var port = new FaultPort(Table().Human); var input = new PokerInputController(port);
+            bool? nestedResult = null;
+            Action callback = () =>
+            {
+                port.Callback = null; port.ReadCallback = null;
+                nestedResult = input.RetryPending();
+            };
+            if (duringRead) port.ReadCallback = callback; else port.Callback = callback;
+            Assert.That(input.Bet(BettingAction.Call()), Is.True);
+            Assert.That(nestedResult, Is.False);
+            Assert.That(port.Commands, Has.Count.EqualTo(1));
+            Assert.That(input.View.Version, Is.EqualTo(2));
+            Assert.That(input.IsPending, Is.False);
+        }
+        [TestCase(false)]
+        [TestCase(true)]
+        public void RefreshDuringActiveDispatchDoesNotReenterThePort(bool duringRead)
+        {
+            var port = new FaultPort(Table().Human); var input = new PokerInputController(port);
+            bool? nestedResult = null;
+            Action callback = () =>
+            {
+                port.Callback = null; port.ReadCallback = null;
+                nestedResult = input.Refresh();
+            };
+            if (duringRead) port.ReadCallback = callback; else port.Callback = callback;
+            Assert.That(input.Bet(BettingAction.Call()), Is.True);
+            Assert.That(nestedResult, Is.False);
+            Assert.That(port.ReadCount, Is.EqualTo(2), "Only the constructor and outer dispatch should read the port.");
+            Assert.That(input.View.Version, Is.EqualTo(2));
+            Assert.That(input.IsPending, Is.False);
+        }
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ReceiveDuringDispatchCannotReplaceTheActiveSnapshot(bool duringRead)
+        {
+            var port = new FaultPort(Table().Human); var input = new PokerInputController(port);
+            PokerPlayerView before = input.View;
+            PokerPlayerView later = ViewAtVersion(before.HandId, 3);
+            Action callback = () =>
+            {
+                Assert.That(input.Receive(later), Is.False);
+                Assert.That(input.View, Is.SameAs(before));
+                Assert.That(input.IsPending, Is.True);
+            };
+            if (duringRead) port.ReadCallback = callback; else port.Callback = callback;
+            Assert.That(input.Bet(BettingAction.Call()), Is.True);
+            Assert.That(input.View.Version, Is.EqualTo(2));
+            Assert.That(input.IsPending, Is.False);
+        }
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ReentrantReceivePreservesSelectionAndAnOuterFailureCanRetry(bool failOnce)
+        {
+            var table = Table(); var port = new FaultPort(table.Human); var input = new PokerInputController(port);
+            input.Bet(BettingAction.Call()); table.AdvanceOpponent(); table.AdvanceOpponent(); input.Refresh();
+            input.Toggle(input.View.OwnCards[0]); PokerPlayerView before = input.View;
+            PokerPlayerView later = ViewAtVersion(before.HandId, 6);
+            port.Callback = () =>
+            {
+                port.Callback = null;
+                Assert.That(input.Receive(later), Is.False);
+                Assert.That(input.View, Is.SameAs(before));
+                Assert.That(input.SelectedCount, Is.EqualTo(1));
+                Assert.That(input.IsPending, Is.True);
+                if (failOnce) throw new TimeoutException();
+            };
+            if (failOnce)
+            {
+                Assert.Throws<TimeoutException>(() => input.Exchange());
+                Assert.That(input.IsPending, Is.True);
+                Assert.That(input.RetryPending(), Is.True);
+                Assert.That(port.Commands[1], Is.SameAs(port.Commands[2]));
+            }
+            else Assert.That(input.Exchange(), Is.True);
+            Assert.That(input.IsPending, Is.False);
+            Assert.That(input.View.Version, Is.EqualTo(5));
+            Assert.That(input.SelectedCount, Is.Zero);
+        }
         [Test]
         public void OpponentOnlyActsOnItsTurnAndOneActionPerStep()
         {
@@ -176,13 +259,34 @@ namespace Poker.Foundation.Tests
             }
         }
         private sealed class FixedRandom : IRandomSource { public int NextInt(int upper) => upper - 1; }
+        private static PokerPlayerView ViewAtVersion(Guid handId, long version)
+        {
+            var session = new PokerHandSession(handId, Setup(), new FixedRandom());
+            session.Start(new StartHandCommand(handId, Guid.NewGuid()));
+            while (session.Version < version)
+            {
+                SeatId seat = session.State.CurrentSeat.Value;
+                HandCommand command = session.State.Phase == HandPhase.Exchange
+                    ? HandCommand.Exchange(handId, Guid.NewGuid(), seat, session.Version, new Card[0])
+                    : HandCommand.Bet(handId, Guid.NewGuid(), seat, session.Version,
+                        session.State.CurrentBetting.GetLegalActions().CanCall ? BettingAction.Call() : BettingAction.Check());
+                Assert.That(session.Submit(seat, command).Accepted, Is.True);
+            }
+            return PokerPlayerViewProjector.Create(session, A);
+        }
         private sealed class FaultPort : IPokerSeatPort
         {
             private readonly IPokerSeatPort inner;
             public FaultPort(IPokerSeatPort inner) { this.inner = inner; }
-            public bool ThrowAfterCommit, FailNextRead; public Action Callback; public PokerPlayerView StaleRead;
+            public bool ThrowAfterCommit, FailNextRead; public Action Callback, ReadCallback; public PokerPlayerView StaleRead;
+            public int ReadCount;
             public readonly List<HandCommand> Commands = new List<HandCommand>();
-            public PokerPlayerView Read() { if (FailNextRead) { FailNextRead = false; throw new TimeoutException(); } return StaleRead ?? inner.Read(); }
+            public PokerPlayerView Read()
+            {
+                ReadCount++; ReadCallback?.Invoke();
+                if (FailNextRead) { FailNextRead = false; throw new TimeoutException(); }
+                return StaleRead ?? inner.Read();
+            }
             public HandReceipt Submit(HandCommand command)
             {
                 Commands.Add(command); Callback?.Invoke(); HandReceipt receipt = inner.Submit(command);

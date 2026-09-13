@@ -19,6 +19,8 @@ Button:disabled { opacity: 0.38; }
 .pot-caption { font-size: 12px; color: #90b5a3; letter-spacing: 4px; }
 .pot-value { font-size: 33px; color: #edcb86; -unity-font-style: bold; }
 .result { font-size: 17px; color: #f6d997; min-height: 22px; }
+.last-action { font-size: 15px; color: #c7d8c6; margin-top: 4px; }
+#result-details { height: 26px; min-width: 80px; font-size: 12px; margin: 3px 0 0 0; padding: 2px 10px; background-color: #214c44; }
 .hand { flex-direction: row; align-items: center; justify-content: center; margin-top: 8px; height: 132px; }
 .card { width: 96px; height: 120px; min-width: 96px; padding: 9px; margin: 0 7px; background-color: #f2efe1; border-width: 3px; border-color: #d5d8c5; color: #1b323c; justify-content: space-between; align-items: center; border-radius: 10px; }
 .card:hover { background-color: #fffdf2; border-color: #e9c982; }
@@ -44,3 +46,26 @@ Button:disabled { opacity: 0.38; }
 .help-overlay { position: absolute; left: 20%; right: 20%; top: 23%; background-color: #17282e; border-width: 2px; border-color: #d6b879; border-radius: 14px; padding: 24px; }
 .help-title { font-size: 24px; -unity-font-style: bold; margin-bottom: 15px; }
 .help-text { white-space: normal; font-size: 17px; margin-bottom: 18px; }
+.app.compact { padding: 10px 18px; }
+.compact .header { height: 46px; }
+.compact .title { font-size: 24px; }
+.compact .subtitle { margin-top: 2px; font-size: 12px; }
+.compact .table { min-height: 370px; margin-top: 6px; margin-bottom: 6px; padding: 10px 24px; border-width: 5px; border-radius: 100px; }
+.compact .seat-title { font-size: 17px; }
+.compact .backs { margin-top: 3px; }
+.compact .card-back { height: 34px; width: 28px; }
+.compact .center-pot { min-height: 85px; }
+.compact .pot-value { font-size: 28px; }
+.compact .last-action { font-size: 13px; }
+.compact .result { font-size: 15px; }
+.compact .hand { height: 104px; margin-top: 5px; }
+.compact .card { width: 80px; min-width: 80px; height: 94px; margin: 0 5px; padding: 6px; }
+.compact .rank { font-size: 29px; }
+.compact .suit { font-size: 15px; }
+.compact .controls { height: 146px; }
+.compact .instruction { font-size: 17px; margin-bottom: 4px; }
+.compact .amount-caption, .compact .amount-hint { margin: 0 5px; font-size: 12px; }
+.compact .actions Button { font-size: 15px; min-width: 116px; height: 40px; }
+.compact .help-overlay { left: 12%; right: 12%; top: 14%; padding: 20px; }
+.compact .help-text { font-size: 15px; }
+.app.completed .controls { height: 130px; }

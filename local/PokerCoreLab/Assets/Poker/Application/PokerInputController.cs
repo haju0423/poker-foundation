@@ -11,6 +11,7 @@ namespace Poker.Application
         private readonly IPokerSeatPort port;
         private readonly HashSet<Card> selected = new HashSet<Card>();
         private HandCommand pending;
+        private bool dispatching;
 
         public PokerInputController(IPokerSeatPort port)
         {
@@ -27,12 +28,16 @@ namespace Poker.Application
         public bool Receive(PokerPlayerView next)
         {
             if (next == null) throw new ArgumentNullException(nameof(next));
+            return !dispatching && AcceptSnapshot(next);
+        }
+        private bool AcceptSnapshot(PokerPlayerView next)
+        {
             if (next.HandId != View.HandId || next.ViewerSeat != View.ViewerSeat || next.Version <= View.Version) return false;
             View = next;
             selected.Clear();
             return true;
         }
-        public bool Refresh() => Receive(port.Read());
+        public bool Refresh() => !dispatching && Receive(port.Read());
 
         public bool Toggle(Card card)
         {
@@ -61,15 +66,43 @@ namespace Poker.Application
         private bool Send(HandCommand command) { pending = command; return Dispatch(); }
         private bool Dispatch()
         {
-            // No catch-and-forget: an uncertain failure must not create a second new-ID action.
-            HandReceipt receipt = port.Submit(pending);
-            if (receipt == null || receipt.HandId != View.HandId || receipt.CommandId != pending.CommandId)
-                throw new InvalidOperationException("The receipt does not match the pending request.");
-            LastReceipt = receipt;
-            Receive(port.Read());
-            if (!receipt.Accepted || (receipt.AppliedVersion.HasValue && View.Version >= receipt.AppliedVersion.Value))
-                pending = null;
-            return receipt.Accepted;
+            if (dispatching) return false;
+            HandCommand request = pending;
+            dispatching = true;
+            try
+            {
+                // Keep retries outside this in-flight call, even if a port invokes a synchronous callback.
+                // An uncertain failure still retains the exact request for a later explicit retry.
+                HandReceipt receipt = port.Submit(request);
+                if (!MatchesRequest(receipt, request))
+                    throw new InvalidOperationException("The receipt does not match the pending request.");
+                LastReceipt = receipt;
+                PokerPlayerView current = port.Read() ?? throw new InvalidOperationException("A current participant view is required.");
+                AcceptSnapshot(current);
+                if (!receipt.Accepted || (receipt.AppliedVersion.HasValue && View.Version >= receipt.AppliedVersion.Value))
+                    pending = null;
+                return receipt.Accepted;
+            }
+            finally { dispatching = false; }
+        }
+        private static bool MatchesRequest(HandReceipt receipt, HandCommand request)
+        {
+            if (receipt == null || receipt.HandId != request.HandId || receipt.CommandId != request.CommandId
+                || receipt.Seat != request.Seat) return false;
+            if (!receipt.Accepted) return !receipt.AppliedVersion.HasValue && !receipt.Transition.HasValue;
+            if (request.ExpectedVersion == long.MaxValue || receipt.AppliedVersion != request.ExpectedVersion + 1
+                || !receipt.Transition.HasValue) return false;
+            HandTransition transition = receipt.Transition.Value;
+            if (transition.HandId != request.HandId || transition.CommandId != request.CommandId
+                || transition.Seat != request.Seat || transition.AppliedVersion != receipt.AppliedVersion.Value
+                || transition.Kind != request.Kind) return false;
+            // Correlate with the immutable request, not the current view: a valid retry can belong to an older phase.
+            if (request.Kind == HandCommandKind.Exchange)
+                return transition.ExchangeCount == request.SelectedCards.Count
+                    && !transition.BettingAction.HasValue && !transition.TargetTotal.HasValue;
+            long? target = request.Action.Kind == BettingActionKind.BetTo || request.Action.Kind == BettingActionKind.RaiseTo
+                ? request.Action.Target : (long?)null;
+            return transition.BettingAction == request.Action.Kind && transition.TargetTotal == target;
         }
         private bool Owns(Card card)
         {

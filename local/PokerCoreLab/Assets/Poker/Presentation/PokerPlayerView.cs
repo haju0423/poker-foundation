@@ -13,13 +13,15 @@ namespace Poker.Presentation
         internal PokerPlayerView(Guid handId, long version, SeatId viewerSeat, HandPhase phase,
             SeatId? currentSeat, Card[] ownCards, PublicSeatView[] seats, long potAmount,
             long? currentBet, PlayerBettingOptions betting, bool canExchange, int maxExchangeCount,
-            long? totalAwarded)
+            long? totalAwarded, PublicHandTransition? lastTransition, PokerHandResultView result)
         {
             HandId = handId; Version = version; ViewerSeat = viewerSeat; Phase = phase; CurrentSeat = currentSeat;
             OwnCards = Array.AsReadOnly((Card[])ownCards.Clone());
             Seats = Array.AsReadOnly((PublicSeatView[])seats.Clone());
             PotAmount = potAmount; CurrentBet = currentBet; Betting = betting;
             CanExchange = canExchange; MaxExchangeCount = maxExchangeCount; TotalAwarded = totalAwarded;
+            LastTransition = lastTransition;
+            Result = result;
         }
 
         public Guid HandId { get; }
@@ -43,5 +45,9 @@ namespace Poker.Presentation
         public int MaxExchangeCount { get; }
         /// <summary>Gross chips paid from pots; null while unresolved, including AwaitingSettlementRule.</summary>
         public long? TotalAwarded { get; }
+        /// <summary>Latest card-free public action facts. Not a lossless history or an instruction to replay it.</summary>
+        public PublicHandTransition? LastTransition { get; }
+        /// <summary>Null until Complete, including unresolved odd-chip settlement. Contains no showdown cards/ranks.</summary>
+        public PokerHandResultView Result { get; }
     }
 }

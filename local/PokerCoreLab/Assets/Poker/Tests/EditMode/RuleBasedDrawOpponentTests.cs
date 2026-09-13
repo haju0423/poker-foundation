@@ -17,12 +17,174 @@ namespace Poker.Foundation.Tests
 
         [TestCase(false)]
         [TestCase(true)]
-        public void FreeActionChecksBeforeAndAfterDraw(bool afterDraw)
+        public void StrongFreeActionUsesTheCorrectBetOrRaiseKind(bool afterDraw)
         {
             var session = Start(TwoPair);
             if (afterDraw) { ReachSecondStreet(session); Act(session, BettingAction.Check()); }
             else Act(session, BettingAction.Call());
-            AssertChoice(session, BettingActionKind.Check);
+            AssertChoice(session, afterDraw ? BettingActionKind.BetTo : BettingActionKind.RaiseTo, afterDraw ? 2 : 4);
+        }
+
+        [TestCase(0, BettingActionKind.Check)]
+        [TestCase(100, BettingActionKind.BetTo)]
+        public void BluffSettingCanDisableOrForceAnEligibleSmallProbe(int percent, BettingActionKind expected)
+        {
+            var policy = new RuleBasedDrawOpponent(new PracticeOpponentSettings(afterDrawBluffPercent: percent));
+            var session = Start(HighCard); ReachSecondStreet(session); Act(session, BettingAction.Check());
+            var view = View(session); var before = session.State;
+            var choice = policy.Choose(view);
+            Assert.That(choice.Action.Kind, Is.EqualTo(expected));
+            Assert.That(choice.Action.Target, Is.EqualTo(percent == 100 ? 2 : 0));
+            Assert.That(session.State, Is.SameAs(before));
+            Assert.That(session.Submit(B, choice).Accepted, Is.True);
+        }
+
+        [Test]
+        public void EvenForcedBluffDoesNotBetHighCardBeforeDrawOrAWeakPairAfterDraw()
+        {
+            var policy = new RuleBasedDrawOpponent(new PracticeOpponentSettings(afterDrawBluffPercent: 100));
+            var first = Start(HighCard); Act(first, BettingAction.Call());
+            Assert.That(policy.Choose(View(first)).Action.Kind, Is.EqualTo(BettingActionKind.Check));
+            var second = Start(Pair); ReachSecondStreet(second); Act(second, BettingAction.Check());
+            Assert.That(policy.Choose(View(second)).Action.Kind, Is.EqualTo(BettingActionKind.Check));
+        }
+
+        [TestCase(11, BettingActionKind.Check)]
+        [TestCase(12, BettingActionKind.RaiseTo)]
+        public void FreeRaiseChecksInsteadOfGoingBelowMinimumWhenBudgetIsSmall(long stack, BettingActionKind expected)
+        {
+            var session = Start(TwoPair, stack); Act(session, BettingAction.Call());
+            AssertChoice(session, expected, expected == BettingActionKind.Check ? 0 : 4);
+        }
+
+        [TestCase(38, BettingActionKind.Check)]
+        [TestCase(39, BettingActionKind.BetTo)]
+        public void FreeBetChecksWhenHalfPotExceedsTheStreetBudget(long stack, BettingActionKind expected)
+        {
+            var session = Start(TwoPair, stack);
+            Act(session, BettingAction.RaiseTo(10)); Act(session, BettingAction.Call());
+            Exchange(session); Exchange(session); Act(session, BettingAction.Check());
+            AssertChoice(session, expected, expected == BettingActionKind.Check ? 0 : 10);
+        }
+
+        [Test]
+        public void ZeroAggressionBudgetDisablesBothValueBetsAndBluffs()
+        {
+            var policy = new RuleBasedDrawOpponent(new PracticeOpponentSettings(aggressionBankrollShare: 0m, afterDrawBluffPercent: 100));
+            foreach (Card[] cards in new[] { HighCard, TwoPair })
+            {
+                var session = Start(cards); ReachSecondStreet(session); Act(session, BettingAction.Check());
+                Assert.That(policy.Choose(View(session)).Action.Kind, Is.EqualTo(BettingActionKind.Check));
+            }
+        }
+
+        [TestCase(false, BettingActionKind.Check)]
+        [TestCase(true, BettingActionKind.BetTo)]
+        public void BluffCountsOnlyNonfoldedPlayers(bool thirdFolds, BettingActionKind expected)
+        {
+            var third = new SeatId(3); var order = new[] { A, B, third };
+            var setup = new HandSetup(ChipLedger.Create(order.Select(s => new SeatChips(s, 100)).ToArray()), order, order, order, order, 1, 2);
+            Card[] remaining = Enumerable.Range(0, 52).Select(Card.FromId).Where(c => !HighCard.Contains(c)).ToArray();
+            var session = new PokerHandSession(Guid.NewGuid(), setup,
+                new RiggedRandom(new[] { remaining.Take(5).ToArray(), HighCard, remaining.Skip(5).Take(5).ToArray() }));
+            Assert.That(session.Start(new StartHandCommand(session.HandId, Guid.NewGuid())).Accepted, Is.True);
+            // With three seats, this opening order makes B the small blind and the third seat the big blind.
+            Act(session, BettingAction.Call()); Act(session, BettingAction.Call());
+            Act(session, thirdFolds ? BettingAction.Fold() : BettingAction.Check());
+            while (session.State.Phase == HandPhase.Exchange) Exchange(session);
+            Act(session, BettingAction.Check());
+            var policy = new RuleBasedDrawOpponent(new PracticeOpponentSettings(afterDrawBluffPercent: 100));
+            var choice = policy.Choose(View(session));
+            Assert.That(choice.Action.Kind, Is.EqualTo(expected));
+            Assert.That(session.Submit(B, choice).Accepted, Is.True);
+        }
+
+        [Test]
+        public void DefaultVariationIsRepeatableAndIncludesChecksAndBluffsWithoutConsumingState()
+        {
+            var session = Start(HighCard, handId: Guid.Parse("90250000-0300-0000-0100-000000000001"));
+            ReachSecondStreet(session); Act(session, BettingAction.Check());
+            var view = View(session); var before = session.State; var seen = new HashSet<BettingActionKind>();
+            for (int seed = 0; seed < 200; seed++)
+            {
+                var policy = new RuleBasedDrawOpponent(PracticeOpponentSettings.Default, seed);
+                var choice = policy.Choose(view); var again = policy.Choose(view);
+                Assert.That(again.Action.Kind, Is.EqualTo(choice.Action.Kind));
+                Assert.That(again.Action.Target, Is.EqualTo(choice.Action.Target));
+                Assert.That(again.CommandId, Is.Not.EqualTo(choice.CommandId));
+                Assert.That(before.CurrentBetting.GetLegalActions().Allows(choice.Action), Is.True);
+                seen.Add(choice.Action.Kind);
+            }
+            Assert.That(seen, Is.EquivalentTo(new[] { BettingActionKind.Check, BettingActionKind.BetTo }));
+            Assert.That(session.State, Is.SameAs(before));
+        }
+
+        [Test]
+        public void DefaultRuntimeSeedVariesAcrossHandIdsButRepeatsForTheSameHand()
+        {
+            var seen = new HashSet<BettingActionKind>();
+            for (int id = 1; id <= 200; id++)
+            {
+                var session = Start(HighCard, handId: new Guid(id, 1, 2, new byte[8]));
+                ReachSecondStreet(session); Act(session, BettingAction.Check());
+                var view = View(session); var before = session.State;
+                var choice = bot.Choose(view); var again = bot.Choose(view);
+                Assert.That(again.Action.Kind, Is.EqualTo(choice.Action.Kind));
+                Assert.That(again.Action.Target, Is.EqualTo(choice.Action.Target));
+                Assert.That(again.CommandId, Is.Not.EqualTo(choice.CommandId));
+                Assert.That(session.State, Is.SameAs(before));
+                seen.Add(choice.Action.Kind);
+            }
+            Assert.That(seen, Is.EquivalentTo(new[] { BettingActionKind.Check, BettingActionKind.BetTo }));
+        }
+
+        [Test]
+        public void HiddenCardsCannotChangeASeededBluffWhenItsPublicDecisionKeyMatches()
+        {
+            Guid id = Guid.Parse("aa000000-0000-0000-0000-000000000001");
+            var first = Start(HighCard, handId: id); var second = Start(HighCard, highHuman: true, handId: id);
+            Assert.That(first.State.GetHand(A).ToArray(), Is.Not.EqualTo(second.State.GetHand(A).ToArray()));
+            ReachSecondStreet(first); Act(first, BettingAction.Check());
+            ReachSecondStreet(second); Act(second, BettingAction.Check());
+            for (int seed = 0; seed < 100; seed++)
+            {
+                var policy = new RuleBasedDrawOpponent(PracticeOpponentSettings.Default, seed);
+                var x = policy.Choose(View(first)); var y = policy.Choose(View(second));
+                Assert.That(y.Action.Kind, Is.EqualTo(x.Action.Kind));
+                Assert.That(y.Action.Target, Is.EqualTo(x.Action.Target));
+            }
+        }
+
+        [TestCase(-0.01)]
+        [TestCase(1.01)]
+        public void SettingsRejectEveryOutOfRangeShare(double invalid)
+        {
+            decimal value = (decimal)invalid;
+            Assert.Throws<ArgumentOutOfRangeException>(() => new PracticeOpponentSettings(beforeDrawHighCardCallLimit: value));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new PracticeOpponentSettings(afterDrawHighCardCallLimit: value));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new PracticeOpponentSettings(beforeDrawPairCallLimit: value));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new PracticeOpponentSettings(afterDrawPairCallLimit: value));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new PracticeOpponentSettings(twoPairCallLimit: value));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new PracticeOpponentSettings(aggressionBankrollShare: value));
+        }
+
+        [TestCase(-1)]
+        [TestCase(101)]
+        public void SettingsRejectInvalidBluffPercent(int value)
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => new PracticeOpponentSettings(afterDrawBluffPercent: value));
+        }
+
+        [Test]
+        public void SettingsAreImmutableAndNullPolicySettingsAreRejected()
+        {
+            Assert.Throws<ArgumentNullException>(() => new RuleBasedDrawOpponent(null));
+            Assert.That(typeof(PracticeOpponentSettings).GetProperties().All(property => property.SetMethod == null), Is.True);
+            var minimum = new PracticeOpponentSettings(0, 0, 0, 0, 0, 0, 0);
+            var maximum = new PracticeOpponentSettings(1, 1, 1, 1, 1, 1, 100);
+            Assert.That(minimum.AggressionBankrollShare, Is.Zero);
+            Assert.That(maximum.AggressionBankrollShare, Is.EqualTo(1));
+            Assert.That(PracticeOpponentSettings.Default.AfterDrawBluffPercent, Is.EqualTo(12));
         }
 
         [TestCase(4, BettingActionKind.Call)]
@@ -242,9 +404,9 @@ namespace Poker.Foundation.Tests
             return new HandSetup(ChipLedger.Create(new[] { new SeatChips(A, stack), new SeatChips(B, stack) }),
                 order, order, order, order, 1, 2);
         }
-        private static PokerHandSession Start(Card[] hand, long stack = 100, bool highHuman = false)
+        private static PokerHandSession Start(Card[] hand, long stack = 100, bool highHuman = false, Guid? handId = null)
         {
-            var session = new PokerHandSession(Guid.NewGuid(), Setup(stack), RandomFor(hand, highHuman));
+            var session = new PokerHandSession(handId ?? Guid.NewGuid(), Setup(stack), RandomFor(hand, highHuman));
             Assert.That(session.Start(new StartHandCommand(session.HandId, Guid.NewGuid())).Accepted, Is.True);
             return session;
         }
@@ -257,7 +419,8 @@ namespace Poker.Foundation.Tests
         private static void Act(PokerHandSession session, BettingAction action)
         {
             SeatId seat = session.State.CurrentSeat.Value;
-            Assert.That(session.Submit(seat, HandCommand.Bet(session.HandId, Guid.NewGuid(), seat, session.Version, action)).Accepted, Is.True);
+            var receipt = session.Submit(seat, HandCommand.Bet(session.HandId, Guid.NewGuid(), seat, session.Version, action));
+            Assert.That(receipt.Accepted, Is.True, "Seat " + seat.Value + ", " + action.Kind + ": " + receipt.Error);
         }
         private static void Exchange(PokerHandSession session)
         {

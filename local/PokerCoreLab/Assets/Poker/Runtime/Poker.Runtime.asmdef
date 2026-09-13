@@ -1,6 +1,6 @@
 {
   "name": "Poker.Runtime",
   "rootNamespace": "Poker.Runtime",
-  "references": ["Poker.Core", "Poker.Presentation", "Poker.Application"],
+  "references": ["Poker.Core", "Poker.Presentation", "Poker.Application", "Poker.Transport"],
   "autoReferenced": true
 }

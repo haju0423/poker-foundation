@@ -27,6 +27,8 @@ namespace Poker.Foundation
         public long Version => committed?.Version ?? 0;
         /// <summary>Null before Start succeeds; otherwise immutable and authority-only.</summary>
         public PokerHandState State => committed?.State;
+        /// <summary>Latest accepted player action, copied by value. Null before an action is accepted.</summary>
+        public HandTransition? LastTransition => committed?.LastTransition;
 
         /// <summary>Trusted lifecycle call, never a player-controlled command. Same accepted ID never reshuffles.</summary>
         public HandReceipt Start(StartHandCommand command)
@@ -46,7 +48,7 @@ namespace Poker.Foundation
             {
                 PokerHandState state = PokerHandState.Begin(setup, random);
                 var receipt = new HandReceipt(HandId, commandId, null, 1, HandError.None);
-                var next = new CommittedHand(state, 1, receipt, new Dictionary<Guid, AcceptedCommand>());
+                var next = new CommittedHand(state, 1, receipt, new Dictionary<Guid, AcceptedCommand>(), null);
                 committed = next;
                 return receipt;
             }
@@ -90,10 +92,11 @@ namespace Poker.Foundation
                 PokerHandState state = exchange ? before.State.ApplyExchange(command.Seat, command.SelectedCards)
                     : before.State.ApplyBet(command.Seat, command.Action);
                 long version = checked(before.Version + 1);
-                var receipt = new HandReceipt(HandId, command.CommandId, command.Seat, version, HandError.None);
+                HandTransition transition = HandTransition.FromAccepted(command, version, before.State, state);
+                var receipt = new HandReceipt(HandId, command.CommandId, command.Seat, version, HandError.None, transition);
                 var accepted = new Dictionary<Guid, AcceptedCommand>(before.Accepted);
                 accepted.Add(command.CommandId, new AcceptedCommand(command, receipt));
-                var next = new CommittedHand(state, version, before.StartReceipt, accepted);
+                var next = new CommittedHand(state, version, before.StartReceipt, accepted, transition);
                 committed = next;
                 return receipt;
             }
@@ -115,12 +118,14 @@ namespace Poker.Foundation
         // Nothing reachable here is mutated after publication. History is retained for this one hand's lifetime.
         private sealed class CommittedHand
         {
-            public CommittedHand(PokerHandState state, long version, HandReceipt start, Dictionary<Guid, AcceptedCommand> accepted)
-            { State = state; Version = version; StartReceipt = start; Accepted = accepted; }
+            public CommittedHand(PokerHandState state, long version, HandReceipt start, Dictionary<Guid, AcceptedCommand> accepted,
+                HandTransition? lastTransition)
+            { State = state; Version = version; StartReceipt = start; Accepted = accepted; LastTransition = lastTransition; }
             public PokerHandState State { get; }
             public long Version { get; }
             public HandReceipt StartReceipt { get; }
             public Dictionary<Guid, AcceptedCommand> Accepted { get; }
+            public HandTransition? LastTransition { get; }
         }
     }
 }

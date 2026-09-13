@@ -35,11 +35,78 @@ namespace Poker.Presentation
         }
         public static string Result(PokerPlayerView view)
         {
-            if (view.Phase != HandPhase.Complete) return "";
+            if (view == null) throw new ArgumentNullException(nameof(view));
+            if (view.Result == null) return "";
             var parts = new List<string>();
-            foreach (PublicSeatView seat in view.Seats)
-                if (seat.Awarded > 0) parts.Add(SeatName(seat.Seat == view.ViewerSeat) + "에게 " + KoreanPokerText.Chips(seat.Awarded.Value) + " 지급");
+            foreach (HandSeatResult seat in view.Result.Seats)
+                if (seat.GrossAward > 0) parts.Add(ParticipantName(view, seat.Seat) + "에게 " + KoreanPokerText.Chips(seat.GrossAward) + " 지급");
             return "팟 지급 완료 · " + string.Join(" / ", parts);
+        }
+
+        /// <summary>Formats authoritative public facts only, never inferred from stack differences.</summary>
+        public static string LastAction(PokerPlayerView view)
+        {
+            if (view == null) throw new ArgumentNullException(nameof(view));
+            if (!view.LastTransition.HasValue) return "";
+            PublicHandTransition action = view.LastTransition.Value;
+            string text = ParticipantName(view, action.Seat) + " · ";
+            if (action.Kind == HandCommandKind.Exchange)
+                text += action.ExchangeCount == 0 ? "교환 없이 패 유지" : action.ExchangeCount + "장 교환";
+            else
+            {
+                switch (action.BettingAction)
+                {
+                    case BettingActionKind.Fold: text += "폴드"; break;
+                    case BettingActionKind.Check: text += "체크"; break;
+                    case BettingActionKind.Call: text += "콜 · " + KoreanPokerText.Chips(action.ChipsPaid) + " 추가"; break;
+                    case BettingActionKind.BetTo: text += KoreanPokerText.Chips(action.TargetTotal.Value) + " 베팅"; break;
+                    case BettingActionKind.RaiseTo: text += "총 " + KoreanPokerText.Chips(action.TargetTotal.Value) + "으로 레이즈"; break;
+                    default: throw new ArgumentException("An accepted public action is required.", nameof(view));
+                }
+            }
+            if (action.RefundedSeat.HasValue)
+                text += " · " + ParticipantName(view, action.RefundedSeat.Value) + "에게 " + KoreanPokerText.Chips(action.RefundedAmount) + " 반환";
+            return text;
+        }
+
+        /// <summary>Opt-in breakdown of already settled values; contains no opponent hand or rank.</summary>
+        public static string ResultDetails(PokerPlayerView view)
+        {
+            if (view == null) throw new ArgumentNullException(nameof(view));
+            PokerHandResultView completed = view.Result;
+            if (completed == null) return "";
+            var lines = new List<string> { completed.Reason == HandCompletionReason.Uncontested
+                ? "한 명만 남아 승부가 끝났어요." : "마지막 패를 비교해 승부가 끝났어요." };
+            for (int i = 0; i < completed.Pots.Count; i++)
+            {
+                HandPotResult pot = completed.Pots[i]; var payouts = new List<string>();
+                foreach (SeatPayout payout in pot.Payouts)
+                    payouts.Add(ParticipantName(view, payout.Seat) + " " + KoreanPokerText.Chips(payout.Amount)
+                        + (payout.HasOddChip ? " (남은 1칩 포함)" : ""));
+                lines.Add(KoreanPokerText.PotLabel(i, pot.Amount) + " → " + string.Join(" / ", payouts));
+            }
+            foreach (HandRefund refund in completed.Refunds)
+                lines.Add(KoreanPokerText.PhaseName(refund.BettingPhase) + " 반환 · " + ParticipantName(view, refund.Seat)
+                    + "에게 " + KoreanPokerText.Chips(refund.Amount));
+            var stacks = new List<string>();
+            foreach (HandSeatResult seat in completed.Seats)
+                stacks.Add(ParticipantName(view, seat.Seat) + " " + KoreanPokerText.Chips(seat.FinalStack));
+            lines.Add("최종 보유 · " + string.Join(" / ", stacks));
+            lines.Add("지급액은 순이익과 달라요." + (completed.Refunds.Count > 0
+                ? " 반환된 칩은 최종 보유 칩에 이미 포함돼요." : ""));
+            return string.Join("\n", lines);
+        }
+
+        private static string ParticipantName(PokerPlayerView view, SeatId seat)
+        {
+            if (seat == view.ViewerSeat) return "나";
+            int other = 0;
+            foreach (PublicSeatView participant in view.Seats)
+            {
+                if (participant.Seat != view.ViewerSeat) other++;
+                if (participant.Seat == seat) return view.Seats.Count == 2 ? "상대" : "상대 " + other;
+            }
+            throw new ArgumentException("The public result refers to a nonparticipant.", nameof(seat));
         }
         public static string RankLabel(Card card)
         {
