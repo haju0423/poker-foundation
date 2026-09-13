@@ -52,7 +52,7 @@ namespace Poker.Runtime
                 (own ? ownStack : otherStack).text = KoreanTableText.SeatName(own) + "  ·  " + KoreanPokerText.Chips(seat.Stack);
                 (own ? ownStatus : otherStatus).text = seat.Awarded.HasValue
                     ? (seat.Awarded > 0 ? KoreanPokerText.PayoutLabel(seat.Awarded.Value) : "지급 없음")
-                    : KoreanTableText.Status(seat) + (view.CurrentSeat == seat.Seat ? " · 현재 차례" : "");
+                    : KoreanTableText.Status(seat) + (view.CurrentSeat == seat.Seat ? " · 차례" : "");
             }
             result.text = KoreanTableText.Result(view);
             handName.text = "내 패  ·  " + KoreanPokerText.HandName(HandEvaluator.Evaluate(view.OwnCards));
@@ -126,7 +126,6 @@ namespace Poker.Runtime
             retry = Click(KoreanTableText.Retry, "retry", () => Run(input.RetryPending));
             foreach (Button button in new[] { fold, check, call, aggressive, exchange, restart, retry }) actionRow.Add(button);
             message = Text("", "message"); controls.Add(message);
-            root.Add(Text("상대 패는 비공개 · 새 연습은 칩을 초기화합니다 · LLM/멀티 미연결", "footnote"));
             help = Box("help-overlay", root);
             help.Add(Text("플레이 방법", "help-title")); help.Add(Text(KoreanTableText.Rules, "help-text"));
             help.Add(Click("알겠어요", "close-help", () => Show(help, false))); Show(help, false);

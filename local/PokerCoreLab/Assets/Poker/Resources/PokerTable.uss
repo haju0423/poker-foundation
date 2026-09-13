@@ -27,21 +27,20 @@ Button:disabled { opacity: 0.38; }
 .rank { font-size: 36px; -unity-font-style: bold; }
 .suit { font-size: 18px; }
 .hand-name { font-size: 13px; color: #bbd1be; margin-top: 3px; }
-.controls { height: 140px; flex-shrink: 0; align-items: center; justify-content: flex-start; }
+.controls { height: 160px; flex-shrink: 0; align-items: center; justify-content: flex-start; }
 .instruction { font-size: 20px; -unity-font-style: bold; margin: 2px 0 7px 0; }
-.amount-row { flex-direction: row; align-items: center; height: 42px; }
+.amount-row { flex-direction: row; align-items: center; height: 42px; flex-shrink: 0; }
 .amount-caption, .amount-hint { font-size: 13px; color: #bbcac2; margin: 0 10px; }
 .amount-row Button { height: 30px; min-width: 50px; font-size: 13px; }
 .target { width: 120px; height: 32px; font-size: 18px; }
 .target > .unity-text-field__input { padding-top: 0; padding-bottom: 0; }
 .target .unity-text-element { color: #193d39; }
-.actions { flex-direction: row; align-items: center; justify-content: center; }
+.actions { flex-direction: row; align-items: center; justify-content: center; flex-shrink: 0; }
 .actions Button { min-width: 126px; height: 44px; }
 #call, #exchange, #aggressive, #new-practice { background-color: #d2b479; color: #142f34; border-color: #eed49e; -unity-font-style: bold; }
 #call:hover, #exchange:hover, #aggressive:hover, #new-practice:hover { background-color: #f1d29b; }
 .quiet { background-color: #263138; color: #bdc5be; }
 .message { min-height: 20px; color: #ebbe94; font-size: 13px; }
-.footnote { font-size: 11px; color: #718987; -unity-text-align: middle-center; }
 .help-overlay { position: absolute; left: 20%; right: 20%; top: 23%; background-color: #17282e; border-width: 2px; border-color: #d6b879; border-radius: 14px; padding: 24px; }
 .help-title { font-size: 24px; -unity-font-style: bold; margin-bottom: 15px; }
 .help-text { white-space: normal; font-size: 17px; margin-bottom: 18px; }

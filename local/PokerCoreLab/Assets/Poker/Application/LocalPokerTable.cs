@@ -9,18 +9,22 @@ namespace Poker.Application
     {
         private readonly PokerHandSession session;
         private readonly SeatId humanSeat;
-        private readonly SimpleDrawOpponent opponent;
+        private readonly IPokerOpponent opponent;
 
         public LocalPokerTable(HandSetup setup, SeatId humanSeat, IRandomSource random)
+            : this(setup, humanSeat, random, new RuleBasedDrawOpponent()) { }
+
+        public LocalPokerTable(HandSetup setup, SeatId humanSeat, IRandomSource random, IPokerOpponent opponent)
         {
             if (setup == null) throw new ArgumentNullException(nameof(setup));
+            if (opponent == null) throw new ArgumentNullException(nameof(opponent));
+            this.opponent = opponent;
             setup.StartingLedger.GetChips(humanSeat);
             this.humanSeat = humanSeat;
             session = new PokerHandSession(Guid.NewGuid(), setup, random);
             HandReceipt start = session.Start(new StartHandCommand(session.HandId, Guid.NewGuid()));
             if (!start.Accepted) throw new InvalidOperationException("Failed to start a new local hand.");
             Human = new BoundSeatPort(session, humanSeat);
-            opponent = new SimpleDrawOpponent();
         }
         public IPokerSeatPort Human { get; }
 

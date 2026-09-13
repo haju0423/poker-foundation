@@ -6,7 +6,7 @@ using Poker.Presentation;
 namespace Poker.Application
 {
     /// <summary>Deterministic test opponent, not an LLM or competitive poker AI. Receives only its own view.</summary>
-    public sealed class SimpleDrawOpponent
+    public sealed class SimpleDrawOpponent : IPokerOpponent
     {
         public HandCommand Choose(PokerPlayerView view)
         {

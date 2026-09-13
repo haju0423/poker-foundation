@@ -52,6 +52,9 @@ namespace Poker.Runtime.Tests
             Assert.That(document.rootVisualElement.Query<VisualElement>(className: "card-back").ToList().Count, Is.EqualTo(5));
             Assert.That(document.rootVisualElement.Query<Button>("call").First().text, Does.Contain("1칩 추가"));
             Assert.That(bootstrap.Progress.Phase, Is.EqualTo(HandPhase.FirstBetting));
+            Assert.That(document.rootVisualElement.Query<Label>(className: "seat-status").ToList().Select(label => label.text),
+                Does.Contain("이번 베팅 총 2칩"));
+            Assert.That(document.rootVisualElement.Q<Label>(className: "footnote"), Is.Null);
             AssertLayout();
             var inputText = document.rootVisualElement.Q<TextField>("bet-target").Q<TextElement>();
             Assert.That(inputText.resolvedStyle.color.grayscale, Is.LessThan(0.4f), "Bet input needs dark, readable text.");
@@ -102,9 +105,23 @@ namespace Poker.Runtime.Tests
         public IEnumerator FoldSettlesAndShowsGrossPayoutWithoutOpponentCards()
         {
             Submit("fold"); Assert.That(bootstrap.Progress.Phase, Is.EqualTo(HandPhase.Complete));
-            Assert.That(document.rootVisualElement.Query<Label>(className: "result").First().text, Does.Contain("테스트 상대"));
+            Assert.That(document.rootVisualElement.Query<Label>(className: "result").First().text, Is.EqualTo("팟 지급 완료 · 상대에게 2칩 지급"));
             Assert.That(document.rootVisualElement.Query<VisualElement>(className: "card-back").ToList().Count, Is.EqualTo(5));
             yield return null;
+        }
+        [UnityTest]
+        public IEnumerator DefaultOpponentRespondsToHumanRaiseWithoutStalling()
+        {
+            document.rootVisualElement.Q<TextField>("bet-target").value = "8";
+            Submit("aggressive");
+            long submittedVersion = bootstrap.Progress.Version;
+            yield return WaitFor(() => bootstrap.Progress.OwnTurn || bootstrap.Progress.Phase == HandPhase.Complete);
+            Assert.That(bootstrap.Progress.Version, Is.GreaterThan(submittedVersion));
+            Assert.That(bootstrap.Progress.Phase,
+                Is.EqualTo(HandPhase.FirstBetting).Or.EqualTo(HandPhase.Exchange).Or.EqualTo(HandPhase.Complete));
+            if (bootstrap.Progress.Phase == HandPhase.FirstBetting)
+                Assert.That(document.rootVisualElement.Q<Button>("call").enabledInHierarchy, Is.True);
+            Assert.That(document.rootVisualElement.Query<VisualElement>(className: "card-back").ToList().Count, Is.EqualTo(5));
         }
         [UnityTest]
         public IEnumerator HelpIsOptInAndCanCloseWithoutAdvancingHand()
@@ -158,6 +175,11 @@ namespace Poker.Runtime.Tests
             Assert.That(opponent.worldBound.yMax, Is.LessThanOrEqualTo(center.worldBound.yMin + 1), "Opponent and pot must not overlap.");
             Assert.That(center.worldBound.yMax, Is.LessThanOrEqualTo(player.worldBound.yMin + 1), "Pot and own hand must not overlap.");
             Assert.That(player.worldBound.yMax, Is.LessThan(root.Q<VisualElement>(className: "table").worldBound.yMax - 8), "Own hand label must fit inside the table.");
+            var actions = root.Q<VisualElement>(className: "actions");
+            var amount = root.Q<VisualElement>(className: "amount-row");
+            if (amount.resolvedStyle.display != DisplayStyle.None)
+                Assert.That(amount.worldBound.yMax, Is.LessThanOrEqualTo(actions.worldBound.yMin), "Bet amount row and action buttons must not overlap.");
+            Assert.That(actions.worldBound.yMax, Is.LessThanOrEqualTo(root.worldBound.yMax), "Action buttons must stay inside the screen.");
         }
         private void Submit(string name) => Submit(document.rootVisualElement.Q<Button>(name));
         private static void Submit(Button button)

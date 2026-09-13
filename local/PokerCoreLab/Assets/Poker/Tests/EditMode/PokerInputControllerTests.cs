@@ -16,7 +16,8 @@ namespace Poker.Foundation.Tests
             return new HandSetup(ChipLedger.Create(new[] { new SeatChips(A, stack), new SeatChips(B, stack) }),
                 order, order, after, after, 1, 2);
         }
-        private static LocalPokerTable Table(SeatId? human = null) => new LocalPokerTable(Setup(), human ?? A, new FixedRandom());
+        // These tests pin the passive fixture; the default practice policy has its own response tests.
+        private static LocalPokerTable Table(SeatId? human = null) => new LocalPokerTable(Setup(), human ?? A, new FixedRandom(), new SimpleDrawOpponent());
 
         [Test]
         public void PortRejectsSpoofedSeatEvenWithCorrectHandVersion()
