@@ -1,0 +1,158 @@
+using System;
+using System.Collections.Generic;
+
+namespace Poker.Foundation
+{
+    /// <summary>Immutable payout candidate from matched hand contributions. No authentication, phase or command history.</summary>
+    public sealed class PotSettlement
+    {
+        private readonly PotAward[] pots;
+        private readonly long[] awarded;
+
+        private PotSettlement(ChipLedger ledger, PotAward[] ownedPots, long[] ownedAwards, long totalAwarded)
+        { Ledger = ledger; pots = ownedPots; awarded = ownedAwards; TotalAwarded = totalAwarded; }
+
+        public ChipLedger Ledger { get; }
+        public long TotalAwarded { get; }
+        public int PotCount => pots.Length;
+        public PotAward GetPot(int index)
+        {
+            if (index < 0 || index >= pots.Length) throw new ArgumentOutOfRangeException(nameof(index));
+            return pots[index];
+        }
+        public long GetAwardedTo(SeatId seat)
+        {
+            Ledger.GetChips(seat);
+            for (int i = 0; i < Ledger.SeatCount; i++) if (Ledger.GetSeatAt(i) == seat) return awarded[i];
+            throw new InvalidOperationException("Ledger seat lookup failed.");
+        }
+
+        /// <summary>
+        /// Caller supplies every nonfolded hand after betting/draw completes. Missing hands are treated as folded.
+        /// Priority must contain exactly all live seats, or be null while the odd-chip policy remains unresolved.
+        /// Null priority succeeds only when no tied pot has a remainder; never uses input order as a fallback.
+        /// </summary>
+        public static PotSettlement Showdown(ChipLedger ledger, IReadOnlyList<ShowdownHand> liveHands,
+            IReadOnlyList<SeatId> oddChipPriority = null)
+        {
+            if (ledger == null) throw new ArgumentNullException(nameof(ledger));
+            if (liveHands == null) throw new ArgumentNullException(nameof(liveHands));
+            long highest = RequireMatchedPot(ledger);
+            int count = liveHands.Count;
+            if (count < 2 || count > ledger.SeatCount) throw new ArgumentException("At least two live hands are required.", nameof(liveHands));
+            var values = new Dictionary<SeatId, HandValue>();
+            var cards = new HashSet<Card>();
+            var caps = new SortedSet<long>();
+            for (int i = 0; i < count; i++)
+            {
+                ShowdownHand hand = liveHands[i];
+                if (hand == null || values.ContainsKey(hand.Owner))
+                    throw new ArgumentException("Live hands must be non-null and have unique owners.", nameof(liveHands));
+                long paid = ledger.GetChips(hand.Owner).Committed;
+                if (paid == 0) throw new ArgumentException("A live hand must have contributed to this pot.", nameof(liveHands));
+                for (int j = 0; j < SeatHand.CardCount; j++)
+                    if (!cards.Add(hand.GetCard(j))) throw new ArgumentException("Live hands share a physical card.", nameof(liveHands));
+                values.Add(hand.Owner, hand.Value);
+                caps.Add(paid);
+            }
+            SeatId[] priority = CopyPriority(oddChipPriority, values);
+            if (caps.Max < highest) throw new SettlementException(SettlementFailure.NoEligibleWinner);
+
+            var awards = new long[ledger.SeatCount];
+            var pots = new List<PotAward>();
+            long lower = 0;
+            foreach (long cap in caps)
+            {
+                long amount = 0;
+                var eligible = new List<SeatId>();
+                var winners = new List<SeatId>();
+                HandValue best = default;
+                for (int i = 0; i < ledger.SeatCount; i++)
+                {
+                    SeatId seat = ledger.GetSeatAt(i);
+                    long paid = ledger.GetChips(seat).Committed;
+                    amount = checked(amount + Math.Min(Math.Max(0, paid - lower), cap - lower));
+                    if (paid < cap || !values.TryGetValue(seat, out HandValue value)) continue;
+                    eligible.Add(seat);
+                    if (winners.Count == 0 || value > best)
+                    { best = value; winners.Clear(); winners.Add(seat); }
+                    else if (value == best) winners.Add(seat);
+                }
+                if (winners.Count == 0) throw new SettlementException(SettlementFailure.NoEligibleWinner);
+                long share = amount / winners.Count;
+                long remainder = amount % winners.Count;
+                var oddRecipients = new HashSet<SeatId>();
+                if (remainder > 0)
+                {
+                    if (priority == null) throw new SettlementException(SettlementFailure.MissingOddChipOrder);
+                    foreach (SeatId seat in priority)
+                        if (winners.Contains(seat) && remainder > 0) { oddRecipients.Add(seat); remainder--; }
+                }
+                var payouts = new SeatPayout[winners.Count];
+                for (int i = 0; i < winners.Count; i++)
+                {
+                    SeatId seat = winners[i];
+                    bool odd = oddRecipients.Contains(seat);
+                    long received = checked(share + (odd ? 1 : 0));
+                    payouts[i] = new SeatPayout(seat, received, odd);
+                    int index = IndexOf(ledger, seat);
+                    awards[index] = checked(awards[index] + received);
+                }
+                pots.Add(new PotAward(lower, cap, amount, eligible.ToArray(), payouts));
+                lower = cap;
+            }
+            return new PotSettlement(ledger.Distribute(awards), pots.ToArray(), awards, ledger.TotalCommitted);
+        }
+
+        /// <summary>Caller proves only this seat remains live. No cards are needed or revealed.</summary>
+        public static PotSettlement AwardUncontested(ChipLedger ledger, SeatId soleWinner)
+        {
+            if (ledger == null) throw new ArgumentNullException(nameof(ledger));
+            SeatChips winner = ledger.GetChips(soleWinner);
+            long highest = RequireMatchedPot(ledger);
+            if (winner.Committed != highest) throw new SettlementException(SettlementFailure.NoEligibleWinner);
+            var awards = new long[ledger.SeatCount];
+            awards[IndexOf(ledger, soleWinner)] = ledger.TotalCommitted;
+            var pot = new PotAward(0, highest, ledger.TotalCommitted, new[] { soleWinner },
+                new[] { new SeatPayout(soleWinner, ledger.TotalCommitted, false) });
+            return new PotSettlement(ledger.Distribute(awards), new[] { pot }, awards, ledger.TotalCommitted);
+        }
+
+        private static long RequireMatchedPot(ChipLedger ledger)
+        {
+            if (ledger.TotalCommitted == 0) throw new SettlementException(SettlementFailure.NothingToAward);
+            long highest = 0, second = 0;
+            for (int i = 0; i < ledger.SeatCount; i++)
+            {
+                long paid = ledger.GetChips(ledger.GetSeatAt(i)).Committed;
+                if (paid > highest) { second = highest; highest = paid; }
+                else if (paid > second) second = paid;
+            }
+            if (highest > second) throw new SettlementException(SettlementFailure.UnmatchedContribution);
+            return highest;
+        }
+
+        private static SeatId[] CopyPriority(IReadOnlyList<SeatId> order, Dictionary<SeatId, HandValue> values)
+        {
+            if (order == null) return null;
+            int count = order.Count;
+            if (count != values.Count) throw new ArgumentException("Priority must include every live seat exactly once.", nameof(order));
+            var seen = new HashSet<SeatId>();
+            var copy = new SeatId[count];
+            for (int i = 0; i < count; i++)
+            {
+                SeatId seat = order[i];
+                if (!values.ContainsKey(seat) || !seen.Add(seat))
+                    throw new ArgumentException("Priority contains an unknown, folded or duplicate seat.", nameof(order));
+                copy[i] = seat;
+            }
+            return copy;
+        }
+
+        private static int IndexOf(ChipLedger ledger, SeatId seat)
+        {
+            for (int i = 0; i < ledger.SeatCount; i++) if (ledger.GetSeatAt(i) == seat) return i;
+            throw new InvalidOperationException("A payout seat is absent from the ledger.");
+        }
+    }
+}

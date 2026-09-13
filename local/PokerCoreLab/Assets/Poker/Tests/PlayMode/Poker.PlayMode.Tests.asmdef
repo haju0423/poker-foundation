@@ -1,0 +1,7 @@
+{
+  "name": "Poker.PlayMode.Tests",
+  "rootNamespace": "Poker.Runtime.Tests",
+  "references": ["Poker.Core", "Poker.Presentation", "Poker.Application", "Poker.Runtime"],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "autoReferenced": false
+}

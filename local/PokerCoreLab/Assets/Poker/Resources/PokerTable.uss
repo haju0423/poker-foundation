@@ -1,0 +1,47 @@
+.app { flex-grow: 1; background-color: #101d23; color: #e6e9dd; padding: 18px 30px 12px 30px; font-size: 18px; }
+.header { flex-direction: row; justify-content: space-between; align-items: center; height: 60px; flex-shrink: 0; }
+.title { font-size: 28px; -unity-font-style: bold; }
+.subtitle { font-size: 13px; color: #91aaa8; margin-top: 5px; }
+.heading-right { flex-direction: row; align-items: center; }
+.phase { color: #e4c587; font-size: 18px; margin-right: 20px; }
+Button { height: 42px; min-width: 85px; border-radius: 8px; border-width: 1px; border-color: #59726c; background-color: #263e41; color: #f0eee1; margin: 4px; padding: 4px 16px; font-size: 17px; }
+Button:hover { background-color: #3d5755; border-color: #dec68d; }
+Button:active { background-color: #6d6d49; }
+Button:disabled { opacity: 0.38; }
+.table { flex-grow: 1; min-height: 430px; background-color: #17453e; border-radius: 160px; border-width: 8px; border-color: #294b48; margin-top: 12px; margin-bottom: 12px; padding: 16px 40px 12px 40px; align-items: center; justify-content: space-between; }
+.opponent, .player { align-items: center; flex-shrink: 0; }
+.seat-title { font-size: 19px; -unity-font-style: bold; }
+.seat-status { font-size: 12px; color: #abc3b7; margin-top: 3px; height: 18px; }
+.backs { flex-direction: row; margin-top: 6px; }
+.card-back { width: 34px; height: 42px; margin-left: 3px; margin-right: 3px; background-color: #244958; border-width: 1px; border-color: #bdab77; border-radius: 5px; align-items: center; justify-content: center; }
+.back-mark { color: #aaad87; font-size: 21px; }
+.center-pot { align-items: center; justify-content: center; min-height: 100px; flex-shrink: 0; }
+.pot-caption { font-size: 12px; color: #90b5a3; letter-spacing: 4px; }
+.pot-value { font-size: 33px; color: #edcb86; -unity-font-style: bold; }
+.result { font-size: 17px; color: #f6d997; min-height: 22px; }
+.hand { flex-direction: row; align-items: center; justify-content: center; margin-top: 8px; height: 132px; }
+.card { width: 96px; height: 120px; min-width: 96px; padding: 9px; margin: 0 7px; background-color: #f2efe1; border-width: 3px; border-color: #d5d8c5; color: #1b323c; justify-content: space-between; align-items: center; border-radius: 10px; }
+.card:hover { background-color: #fffdf2; border-color: #e9c982; }
+.card.selected { translate: 0 -11px; border-color: #f6c56c; background-color: #fff5cf; }
+.red-card { color: #b74743; }
+.rank { font-size: 36px; -unity-font-style: bold; }
+.suit { font-size: 18px; }
+.hand-name { font-size: 13px; color: #bbd1be; margin-top: 3px; }
+.controls { height: 140px; flex-shrink: 0; align-items: center; justify-content: flex-start; }
+.instruction { font-size: 20px; -unity-font-style: bold; margin: 2px 0 7px 0; }
+.amount-row { flex-direction: row; align-items: center; height: 42px; }
+.amount-caption, .amount-hint { font-size: 13px; color: #bbcac2; margin: 0 10px; }
+.amount-row Button { height: 30px; min-width: 50px; font-size: 13px; }
+.target { width: 120px; height: 32px; font-size: 18px; }
+.target > .unity-text-field__input { padding-top: 0; padding-bottom: 0; }
+.target .unity-text-element { color: #193d39; }
+.actions { flex-direction: row; align-items: center; justify-content: center; }
+.actions Button { min-width: 126px; height: 44px; }
+#call, #exchange, #aggressive, #new-practice { background-color: #d2b479; color: #142f34; border-color: #eed49e; -unity-font-style: bold; }
+#call:hover, #exchange:hover, #aggressive:hover, #new-practice:hover { background-color: #f1d29b; }
+.quiet { background-color: #263138; color: #bdc5be; }
+.message { min-height: 20px; color: #ebbe94; font-size: 13px; }
+.footnote { font-size: 11px; color: #718987; -unity-text-align: middle-center; }
+.help-overlay { position: absolute; left: 20%; right: 20%; top: 23%; background-color: #17282e; border-width: 2px; border-color: #d6b879; border-radius: 14px; padding: 24px; }
+.help-title { font-size: 24px; -unity-font-style: bold; margin-bottom: 15px; }
+.help-text { white-space: normal; font-size: 17px; margin-bottom: 18px; }
