@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using Poker.Runtime;
 using UnityEditor;
+using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -63,11 +65,28 @@ namespace Poker.Editor
             PlayerSettings.defaultScreenWidth = 1200; PlayerSettings.defaultScreenHeight = 800;
             PlayerSettings.resizableWindow = true;
             PlayerSettings.productName = "Five Card Draw Practice";
-            BuildReport report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+            string[] previousArguments = PlayerSettings.GetAdditionalCompilerArguments(NamedBuildTarget.Standalone);
+            BuildReport report;
+            try
             {
-                scenes = new[] { ScenePath }, locationPathName = path,
-                target = target, options = options
-            });
+                if ((options & BuildOptions.Development) == 0)
+                {
+                    // Keep machine-specific source and symbol paths out of distributed assemblies.
+                    string projectRoot = Path.GetDirectoryName(UnityEngine.Application.dataPath).Replace('\\', '/');
+                    var arguments = new List<string>(previousArguments ?? Array.Empty<string>());
+                    arguments.Add("-pathmap:\"" + projectRoot + "=/_/Poker\"");
+                    PlayerSettings.SetAdditionalCompilerArguments(NamedBuildTarget.Standalone, arguments.ToArray());
+                }
+                report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+                {
+                    scenes = new[] { ScenePath }, locationPathName = path,
+                    target = target, options = options
+                });
+            }
+            finally
+            {
+                PlayerSettings.SetAdditionalCompilerArguments(NamedBuildTarget.Standalone, previousArguments ?? Array.Empty<string>());
+            }
             if (report.summary.result != BuildResult.Succeeded) throw new InvalidOperationException("Practice build failed.");
             File.Copy("Assets/Poker/Resources/Fonts/OFL.txt", Path.Combine(Path.GetDirectoryName(path), "FONT-LICENSE.txt"), true);
             Debug.Log("POKER_PRACTICE_BUILD_READY");
