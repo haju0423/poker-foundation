@@ -2,7 +2,12 @@
 
 ## 실행
 
-[실행 파일 다운로드 (macOS)](https://github.com/haju0423/poker-foundation/releases/download/2026.09.14/FiveCardDraw.zip)
+- [Windows 64비트 다운로드](https://github.com/haju0423/poker-foundation/releases/download/2026.09.14/FiveCardDraw-Windows.zip)
+- [macOS 다운로드](https://github.com/haju0423/poker-foundation/releases/download/2026.09.14/FiveCardDraw.zip)
+
+Windows는 압축을 모두 푼 뒤 `Five Card Draw.exe`를 실행합니다.
+같은 폴더의 데이터 파일도 함께 있어야 합니다.
+Windows 빌드는 완료했으며, 실제 Windows PC에서의 실행 확인은 아직 필요합니다.
 
 Unity **6000.3.23f1**에서 `local/PokerCoreLab` 폴더를 열고,
 `Assets/Poker/Samples/PracticeTable.unity` 장면에서 Play를 누릅니다.
