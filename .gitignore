@@ -14,6 +14,11 @@ local/PokerCoreLab/*.user
 local/PokerCoreLab/*.log
 .verification/
 verification-local/
+devlog/
+research/
+verification/
+DEVLOG.md
+HANDOFF.md
 
 # Local credentials and signing material must never be shared.
 .env
