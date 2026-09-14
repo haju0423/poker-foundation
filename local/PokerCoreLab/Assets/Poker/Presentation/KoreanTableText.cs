@@ -9,10 +9,10 @@ namespace Poker.Presentation
     {
         public const string Title = "파이브 카드 드로우";
         public const string Subtitle = "1:1 연습 테이블 · 기본 포커";
-        public static string NewPractice(long startingStack) => "새 연습 · 각 " + KoreanPokerText.Chips(startingStack);
+        public static string NewPractice(long startingStack) => "처음부터 · 각 " + KoreanPokerText.Chips(startingStack);
         public const string Pending = "행동을 확인하고 있어요";
         public const string Retry = "같은 요청 다시 확인";
-        public const string Rules = "5장으로 승부하는 포커예요.\n첫 베팅 → 원하는 카드 0~5장 교환 → 마지막 베팅 → 정산\n콜: 필요한 칩을 따라 냅니다. 체크: 추가 칩 없이 넘깁니다.\n폴드: 이번 승부를 포기합니다. 레이즈: 베팅 총액을 높입니다.\n상대는 자기 패와 콜 비용에 따라 반응하는 연습 상대예요.\n상대 패는 아직 공개하지 않아요. 새 연습을 누르면 칩이 초기화돼요.";
+        public const string Rules = "5장으로 승부하는 포커예요.\n첫 베팅 → 카드 0~5장 교환 → 마지막 베팅 → 쇼다운\n콜: 필요한 칩을 따라 냅니다. 체크: 추가 칩 없이 넘깁니다.\n폴드: 이번 승부를 포기합니다. 레이즈: 베팅 총액을 높입니다.\n쇼다운에서는 남은 참가자의 패를 공개해요. 폴드로 끝나면 공개하지 않아요.\n다음 판은 보유 칩을 이어가고, 처음부터는 칩을 초기화해요.\n현재 연습판은 블라인드 자리·행동 순서를 고정해요. 상대는 규칙 기반 연습 상대예요.";
         public static string SeatName(bool own) => own ? "나" : "상대";
         public static string Status(PublicSeatView seat)
         {
@@ -27,7 +27,9 @@ namespace Poker.Presentation
         {
             if (pending) return Pending;
             if (view.Phase == HandPhase.AwaitingSettlementRule) return "남는 칩의 지급 기준을 정해야 마칠 수 있어요.";
-            if (view.Phase == HandPhase.Complete) return "한 판 끝! 새 연습을 누르면 칩이 초기화돼요.";
+            if (view.Phase == HandPhase.Complete) return CanContinue(view)
+                ? "다음 판에서도 지금 보유한 칩으로 이어가요."
+                : "보유 칩이 없는 참가자가 있어요. 처음부터 다시 시작할 수 있어요.";
             if (!view.IsOwnTurn) return "상대의 차례예요";
             if (view.CanExchange) return "바꿀 카드를 누른 뒤 교환을 확정하세요.";
             return view.Betting.CanCheck ? "내 차례 · 추가 칩 없이 체크할 수 있어요."
@@ -69,7 +71,61 @@ namespace Poker.Presentation
             return text;
         }
 
-        /// <summary>Opt-in breakdown of already settled values; contains no opponent hand or rank.</summary>
+        public static bool CanContinue(PokerPlayerView view)
+        {
+            if (view == null || view.Result == null) return false;
+            foreach (var seat in view.Result.Seats) if (seat.FinalStack <= 0) return false;
+            return true;
+        }
+
+        /// <summary>Concise two-player comparison. Multi-pot tables retain their per-pot payout breakdown.</summary>
+        public static string ShowdownSummary(PokerPlayerView view)
+        {
+            if (view.Result == null) return "";
+            if (view.Result.Reason == HandCompletionReason.Uncontested)
+            {
+                foreach (var seat in view.Result.Seats)
+                    if (seat.GrossAward > 0)
+                        return ParticipantName(view, seat.Seat) + " 승리 · "
+                            + (view.LastTransition.HasValue ? ParticipantName(view, view.LastTransition.Value.Seat) + " 폴드" : "폴드로 승부 종료")
+                            + " · 패 비공개";
+            }
+            var hands = view.Result.RevealedHands;
+            if (hands.Count != 2 || view.Result.Pots.Count != 1) return "쇼다운 · 공개된 패와 팟별 정산을 확인하세요.";
+            var first = hands[0]; var second = hands[1];
+            int comparison = first.Value.CompareTo(second.Value);
+            if (comparison == 0) return "무승부 · 족보와 비교 카드가 같아요.";
+            var winner = comparison > 0 ? first : second;
+            var loser = comparison > 0 ? second : first;
+            return ParticipantName(view, winner.Seat) + " 승리 · " + ComparisonReason(winner.Value, loser.Value);
+        }
+
+        public static string ComparisonReason(HandValue winner, HandValue loser)
+        {
+            if (winner.CompareTo(loser) <= 0) throw new ArgumentException("A stronger hand is required.");
+            if (winner.Category != loser.Category)
+                return KoreanPokerText.HandName(winner) + " > " + KoreanPokerText.HandName(loser);
+            for (int i = 0; i < winner.TieBreakerCount; i++)
+                if (winner.GetTieBreaker(i) != loser.GetTieBreaker(i))
+                    return KoreanPokerText.HandName(winner) + " · " + ComparisonPart(winner.Category, i) + " "
+                        + RankText(winner.GetTieBreaker(i)) + " > " + RankText(loser.GetTieBreaker(i));
+            throw new InvalidOperationException("Different hand values require a comparison difference.");
+        }
+        private static string ComparisonPart(HandCategory category, int index)
+        {
+            switch (category)
+            {
+                case HandCategory.OnePair: return index == 0 ? "페어" : "키커 " + index;
+                case HandCategory.TwoPair: return index == 0 ? "높은 페어" : index == 1 ? "낮은 페어" : "키커";
+                case HandCategory.ThreeOfAKind: return index == 0 ? "트리플" : "키커 " + index;
+                case HandCategory.FullHouse: return index == 0 ? "트리플" : "페어";
+                case HandCategory.FourOfAKind: return index == 0 ? "포카드" : "키커";
+                default: return index == 0 ? "가장 높은 카드" : (index + 1) + "번째 비교 카드";
+            }
+        }
+        private static string RankText(int rank) => rank == 14 ? "A" : rank == 13 ? "K" : rank == 12 ? "Q" : rank == 11 ? "J" : rank.ToString();
+
+        /// <summary>Opt-in payout breakdown plus explicitly revealed showdown hands.</summary>
         public static string ResultDetails(PokerPlayerView view)
         {
             if (view == null) throw new ArgumentNullException(nameof(view));
@@ -77,6 +133,8 @@ namespace Poker.Presentation
             if (completed == null) return "";
             var lines = new List<string> { completed.Reason == HandCompletionReason.Uncontested
                 ? "한 명만 남아 승부가 끝났어요." : "마지막 패를 비교해 승부가 끝났어요." };
+            foreach (var hand in completed.RevealedHands)
+                lines.Add(ParticipantName(view, hand.Seat) + " · " + KoreanPokerText.HandName(hand.Value));
             for (int i = 0; i < completed.Pots.Count; i++)
             {
                 HandPotResult pot = completed.Pots[i]; var payouts = new List<string>();

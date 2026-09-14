@@ -1,5 +1,6 @@
 using System;
 using Poker.Foundation;
+using Poker.Presentation;
 using UnityEngine;
 
 namespace Poker.Runtime
@@ -30,6 +31,26 @@ namespace Poker.Runtime
             ledger.GetChips(new SeatId(humanSeat));
             return new HandSetup(ledger, Convert(dealOrder), Convert(openingOrder), Convert(exchangeOrder), Convert(closingOrder),
                 smallBlind, bigBlind); // No odd-chip default; the team still owns that decision.
+        }
+        /// <summary>Carry final settled stacks only. Preserve explicit fixture orders; no rotation or rebuy policy.</summary>
+        public HandSetup CreateContinuationSetup(PokerHandResultView result)
+        {
+            if (result == null) throw new ArgumentNullException(nameof(result));
+            HandSetup configured = CreateSetup();
+            if (result.Seats.Count != configured.DealOrder.Count)
+                throw new InvalidOperationException("The practice participants cannot change between hands.");
+            var seats = new SeatChips[result.Seats.Count];
+            for (int i = 0; i < seats.Length; i++)
+            {
+                var previous = result.Seats[i];
+                if (previous.Seat != configured.DealOrder[i])
+                    throw new InvalidOperationException("The practice participants cannot change between hands.");
+                if (previous.FinalStack <= 0)
+                    throw new InvalidOperationException("An unfunded participant requires an explicit new practice, not an automatic rebuy.");
+                seats[i] = new SeatChips(previous.Seat, previous.FinalStack);
+            }
+            return new HandSetup(ChipLedger.Create(seats), configured.DealOrder, configured.OpeningOrder,
+                configured.ExchangeOrder, configured.ClosingOrder, configured.SmallBlind, configured.BigBlind);
         }
         private static SeatId[] Convert(int[] values)
         {

@@ -13,7 +13,7 @@ namespace Poker.Transport
             if (view == null) throw new ArgumentNullException(nameof(view));
             var value = new PokerWireSnapshot
             {
-                protocolVersion = ProtocolVersion, message = "snapshot", handId = view.HandId.ToString("D"),
+                protocolVersion = SnapshotProtocolVersion, message = "snapshot", handId = view.HandId.ToString("D"),
                 version = Number(view.Version), viewerSeat = view.ViewerSeat.Value, phase = PokerWireTokens.Phase(view.Phase),
                 currentSeat = view.CurrentSeat?.Value ?? 0, ownCards = view.OwnCards.Select(card => card.Id).ToArray(),
                 potAmount = Number(view.PotAmount), currentBet = Optional(view.CurrentBet),
@@ -40,7 +40,7 @@ namespace Poker.Transport
 
         public static void Validate(PokerWireSnapshot value)
         {
-            Need(value != null, "snapshot"); Header(value.protocolVersion, value.message, "snapshot");
+            Need(value != null, "snapshot"); Header(value.protocolVersion, value.message, "snapshot", SnapshotProtocolVersion);
             Id(value.handId); long version = Number(value.version, true); Seat(value.viewerSeat); Seat(value.currentSeat, true);
             var phase = PokerWireTokens.Phase(value.phase); long pot = Number(value.potAmount);
             long? currentBet = Optional(value.currentBet), award = Optional(value.totalAwarded);
@@ -109,7 +109,9 @@ namespace Poker.Transport
                 { seat = payout.Seat.Value, amount = Number(payout.Amount), hasOddChip = payout.HasOddChip }).ToArray()
             }).ToArray(),
             refunds = source.Refunds.Select(refund => new PokerWireRefund
-            { bettingPhase = PokerWireTokens.Phase(refund.BettingPhase), seat = refund.Seat.Value, amount = Number(refund.Amount) }).ToArray()
+            { bettingPhase = PokerWireTokens.Phase(refund.BettingPhase), seat = refund.Seat.Value, amount = Number(refund.Amount) }).ToArray(),
+            revealedHands = source.RevealedHands.Select(hand => new PokerWireRevealedHand
+            { seat = hand.Seat.Value, cards = hand.Cards.Select(card => card.Id).ToArray() }).ToArray()
         };
 
         private static void Validate(PokerWireResult result, PokerWireSnapshot snapshot)
@@ -119,6 +121,22 @@ namespace Poker.Transport
             var reason = PokerWireTokens.Reason(result.reason); long total = Number(result.totalAwarded, true);
             int live = snapshot.seats.Count(seat => !seat.folded);
             Need(live > 0 && (reason == HandCompletionReason.Uncontested) == (live == 1), "result.reason");
+            int revealCount = reason == HandCompletionReason.Showdown ? live : 0;
+            ArraySize(result.revealedHands, revealCount, revealCount, "result.revealedHands");
+            var revealedSeats = new HashSet<int>();
+            int revealIndex = 0;
+            var liveOrder = snapshot.seats.Where(seat => !seat.folded).Select(seat => seat.seat).ToArray();
+            // Include the viewer's private cards too so a folded viewer cannot receive a duplicated card.
+            var knownCards = new HashSet<int>(snapshot.ownCards);
+            foreach (var hand in result.revealedHands)
+            {
+                Need(hand != null && snapshot.seats.Any(seat => seat.seat == hand.seat && !seat.folded)
+                    && hand.seat == liveOrder[revealIndex++] && revealedSeats.Add(hand.seat), "result.revealed_seat");
+                Cards(hand.cards, SeatHand.CardCount, SeatHand.CardCount);
+                if (hand.seat == snapshot.viewerSeat)
+                    Need(hand.cards.SequenceEqual(snapshot.ownCards), "result.revealed_own_cards");
+                else foreach (int card in hand.cards) Need(knownCards.Add(card), "result.revealed_duplicate_card");
+            }
             ArraySize(result.seats, snapshot.seats.Length, snapshot.seats.Length, "result.seats");
             var awards = new Dictionary<int, decimal>(); decimal gross = 0;
             for (int i = 0; i < result.seats.Length; i++)

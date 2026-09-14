@@ -18,7 +18,7 @@ namespace Poker.Presentation
             PokerHandState state = session.State;
             if (state == null) throw new InvalidOperationException("No hand has started; lobby views are a separate contract.");
             long version = session.Version;
-            // GetHand rejects nonparticipants. Only this seat's cards are ever read by the projector.
+            // GetHand rejects nonparticipants. Other hands are only read by the completed-showdown projector below.
             SeatHand ownHand = state.GetHand(authorizedViewer);
             var ownCards = new Card[ownHand.Count];
             for (int i = 0; i < ownCards.Length; i++) ownCards[i] = ownHand[i];

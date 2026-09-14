@@ -7,10 +7,11 @@ using Poker.Presentation;
 
 namespace Poker.Transport
 {
-    /// <summary>Explicit v1 copies and syntax checks. Decoding never approves a player command.</summary>
+    /// <summary>Explicit command/receipt v1 and snapshot v2 copies. Decoding never approves a player command.</summary>
     public static partial class PokerWireMapper
     {
         public const int ProtocolVersion = 1;
+        public const int SnapshotProtocolVersion = 2;
         public const int MaximumSeatCount = Card.DeckSize / (SeatHand.CardCount + ExchangeRound.MaxExchangeCount);
 
         public static PokerWireCommand ToWire(HandCommand command)
@@ -144,8 +145,8 @@ namespace Poker.Transport
 
         private static bool IsSized(BettingActionKind action) => action == BettingActionKind.BetTo || action == BettingActionKind.RaiseTo;
         private static bool IsBetting(HandPhase phase) => phase == HandPhase.FirstBetting || phase == HandPhase.SecondBetting;
-        private static void Header(int version, string message, string expected)
-        { Need(version == ProtocolVersion, "protocolVersion"); Need(message == expected, "message"); }
+        private static void Header(int version, string message, string expected, int expectedVersion = ProtocolVersion)
+        { Need(version == expectedVersion, "protocolVersion"); Need(message == expected, "message"); }
         private static void Need(bool condition, string field) { if (!condition) throw new PokerWireException(field); }
         private static Guid Id(string value)
         {

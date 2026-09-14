@@ -67,6 +67,14 @@ namespace Poker.Transport
         public PokerWireSeatResult[] seats;
         public PokerWirePot[] pots;
         public PokerWireRefund[] refunds;
+        public PokerWireRevealedHand[] revealedHands;
+    }
+
+    [Serializable]
+    public sealed class PokerWireRevealedHand
+    {
+        public int seat;
+        public int[] cards;
     }
 
     [Serializable]

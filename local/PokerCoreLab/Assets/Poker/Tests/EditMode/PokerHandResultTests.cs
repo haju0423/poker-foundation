@@ -51,12 +51,22 @@ namespace Poker.Foundation.Tests
         }
 
         [Test]
-        public void EqualHandsShowdownCopiesBothWinnersWithoutTheirHands()
+        public void EqualHandsShowdownRevealsBothHandsAndValues()
         {
             var s = Start(100, 100); Finish(s); var result = Result(s);
             Assert.That(result.Reason, Is.EqualTo(HandCompletionReason.Showdown));
             Assert.That(result.Pots[0].Payouts.Select(p => p.Amount), Is.EqualTo(new long[] { 2, 2 }));
             Assert.That(result.Refunds, Is.Empty); AssertExactCopy(s, result);
+            Assert.That(result.RevealedHands.Select(h => h.Seat), Is.EqualTo(new[] { A, B }));
+            foreach (var hand in result.RevealedHands)
+            {
+                Assert.That(hand.Cards, Is.EqualTo(s.State.GetHand(hand.Seat)));
+                Assert.That(hand.Value, Is.EqualTo(HandEvaluator.Evaluate(hand.Cards)));
+                Assert.Throws<NotSupportedException>(() => ((IList<Card>)hand.Cards)[0] = default);
+            }
+            Assert.Throws<NotSupportedException>(() => ((IList<RevealedHandView>)result.RevealedHands)[0] = null);
+            Assert.That(PokerHandResultProjector.Create(s, B).RevealedHands.SelectMany(h => h.Cards),
+                Is.EqualTo(result.RevealedHands.SelectMany(h => h.Cards)));
         }
 
         [Test]
@@ -125,17 +135,18 @@ namespace Poker.Foundation.Tests
         }
 
         [Test]
-        public void ResultSurfaceCannotRetainCardsRanksOrAuthorityReferences()
+        public void ResultSurfaceOnlyAllowsExplicitPublicHandsNotAuthorityReferences()
         {
-            AssertSurface(typeof(PokerHandResultView), "HandId Version ViewerSeat Reason TotalAwarded Seats Pots Refunds");
+            AssertSurface(typeof(PokerHandResultView), "HandId Version ViewerSeat Reason TotalAwarded Seats Pots Refunds RevealedHands");
+            AssertSurface(typeof(RevealedHandView), "Seat Cards Value");
             AssertSurface(typeof(HandPotResult), "LowerBound ContributionCap Amount EligibleSeats Payouts");
             AssertSurface(typeof(HandSeatResult), "Seat FinalStack GrossAward");
             AssertSurface(typeof(HandRefund), "BettingPhase Seat Amount");
             AssertSurface(typeof(SeatPayout), "Seat Amount HasOddChip");
             var allowed = new HashSet<Type> { typeof(Guid), typeof(long), typeof(bool), typeof(SeatId), typeof(HandCompletionReason), typeof(HandPhase),
                 typeof(IReadOnlyList<HandSeatResult>), typeof(IReadOnlyList<HandPotResult>), typeof(IReadOnlyList<HandRefund>),
-                typeof(IReadOnlyList<SeatId>), typeof(IReadOnlyList<SeatPayout>) };
-            foreach (var type in new[] { typeof(PokerHandResultView), typeof(HandPotResult), typeof(HandSeatResult), typeof(HandRefund), typeof(SeatPayout) })
+                typeof(IReadOnlyList<SeatId>), typeof(IReadOnlyList<SeatPayout>), typeof(IReadOnlyList<RevealedHandView>), typeof(IReadOnlyList<Card>), typeof(HandValue) };
+            foreach (var type in new[] { typeof(PokerHandResultView), typeof(HandPotResult), typeof(HandSeatResult), typeof(HandRefund), typeof(SeatPayout), typeof(RevealedHandView) })
                 foreach (var field in type.GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public))
                 { Assert.That(field.IsInitOnly, Is.True); Assert.That(allowed.Contains(field.FieldType), Is.True, type.Name + "." + field.Name); }
         }
@@ -148,6 +159,7 @@ namespace Poker.Foundation.Tests
         }
         private static void AssertExactCopy(PokerHandSession s, PokerHandResultView result)
         {
+            if (result.Reason == HandCompletionReason.Uncontested) Assert.That(result.RevealedHands, Is.Empty);
             Assert.That(result.Seats.Select(x => x.Seat), Is.EqualTo(Enumerable.Range(0, s.State.SeatCount).Select(s.State.GetSeatAt)));
             foreach (var seat in result.Seats)
             {
@@ -165,6 +177,17 @@ namespace Poker.Foundation.Tests
             }
             Assert.That(result.TotalAwarded, Is.EqualTo(s.State.Settlement.TotalAwarded));
             Assert.That(PokerPlayerViewProjector.Create(s, A).Result.Version, Is.EqualTo(result.Version));
+        }
+        [Test]
+        public void FoldedParticipantIsNeverRevealedEvenToTheFoldedViewer()
+        {
+            var s = Start(100, 100, 100);
+            Act(s, BettingAction.Fold()); Finish(s);
+            foreach (var viewer in new[] { A, B, new SeatId(3) })
+            {
+                var result = PokerHandResultProjector.Create(s, viewer);
+                Assert.That(result.RevealedHands.Select(h => h.Seat), Is.EqualTo(new[] { B, new SeatId(3) }));
+            }
         }
         private static PokerHandResultView Result(PokerHandSession s) => PokerHandResultProjector.Create(s, A);
         private static PokerHandSession New(params long[] stacks)

@@ -29,11 +29,22 @@ namespace Poker.Presentation
             var pots = new HandPotResult[state.Settlement.PotCount];
             for (int i = 0; i < pots.Length; i++) pots[i] = new HandPotResult(state.Settlement.GetPot(i));
             var refunds = new List<HandRefund>(2);
+            var revealed = new List<RevealedHandView>();
+            if (live > 1)
+                for (int i = 0; i < state.SeatCount; i++)
+                {
+                    SeatId seat = state.GetSeatAt(i);
+                    if (state.IsFolded(seat)) continue;
+                    SeatHand hand = state.GetHand(seat);
+                    var cards = new Card[SeatHand.CardCount];
+                    for (int j = 0; j < cards.Length; j++) cards[j] = hand[j];
+                    revealed.Add(new RevealedHandView(seat, cards));
+                }
             AddRefund(refunds, state.FirstBetting, HandPhase.FirstBetting);
             AddRefund(refunds, state.SecondBetting, HandPhase.SecondBetting);
             return new PokerHandResultView(session.HandId, session.Version, authorizedViewer,
                 live == 1 ? HandCompletionReason.Uncontested : HandCompletionReason.Showdown,
-                state.Settlement.TotalAwarded, seats, pots, refunds.ToArray());
+                state.Settlement.TotalAwarded, seats, pots, refunds.ToArray(), revealed.ToArray());
         }
         private static void AddRefund(List<HandRefund> result, BettingRound round, HandPhase phase)
         {

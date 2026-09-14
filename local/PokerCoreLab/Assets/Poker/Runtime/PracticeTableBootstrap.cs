@@ -28,13 +28,15 @@ namespace Poker.Runtime
             if (!UnityEngine.Application.isBatchMode) Screen.SetResolution(1200, 800, FullScreenMode.Windowed);
             StartPractice();
         }
-        private void StartPractice()
+        private void StartPractice() => StartPractice(false);
+        private void ContinuePractice() => StartPractice(true);
+        private void StartPractice(bool carryStacks)
         {
             // Never reset a live/awaiting-rule hand. Only the initial start or an explicit completed-practice restart.
             if (input != null && input.View.Phase != HandPhase.Complete) return;
             // Validate caller settings/assets before disposing the currently displayed completed result.
             if (settings == null) throw new InvalidOperationException("Assign the explicit practice settings asset.");
-            HandSetup setup = settings.CreateSetup();
+            HandSetup setup = carryStacks ? settings.CreateContinuationSetup(input?.View.Result) : settings.CreateSetup();
             double nextDelay = settings.opponentDelaySeconds;
             if (double.IsNaN(nextDelay) || double.IsInfinity(nextDelay))
                 throw new ArgumentException("The practice delay must be finite.");
@@ -69,7 +71,7 @@ namespace Poker.Runtime
             progress = null;
             screen?.Dispose();
             input = nextInput;
-            screen = new PokerTableScreen(document.rootVisualElement, input, StartPractice, settings.startingStack, font, RetryProgress);
+            screen = new PokerTableScreen(document.rootVisualElement, input, StartPractice, settings.startingStack, font, RetryProgress, ContinuePractice);
             var currentScreen = screen;
             progress = new PracticeProgressRunner(table.AdvanceOpponent, () => { nextInput.Refresh(); currentScreen.ResumeProgress(); });
             opponentDelay = nextDelay;

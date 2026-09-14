@@ -5,8 +5,8 @@ using Poker.Foundation;
 namespace Poker.Presentation
 {
     /// <summary>
-    /// Detached, immutable view for exactly one authorized participant. OwnCards is its only card-bearing field.
-    /// Opponent/showdown cards are deliberately absent until the team approves a reveal policy.
+    /// Detached, immutable view for exactly one authorized participant. Only OwnCards is private.
+    /// Completed showdown cards are explicitly public through Result.RevealedHands; folded cards stay private.
     /// </summary>
     public sealed class PokerPlayerView
     {
@@ -47,7 +47,7 @@ namespace Poker.Presentation
         public long? TotalAwarded { get; }
         /// <summary>Latest card-free public action facts. Not a lossless history or an instruction to replay it.</summary>
         public PublicHandTransition? LastTransition { get; }
-        /// <summary>Null until Complete, including unresolved odd-chip settlement. Contains no showdown cards/ranks.</summary>
+        /// <summary>Null until Complete, including unresolved odd-chip settlement. Showdown reveals only remaining hands.</summary>
         public PokerHandResultView Result { get; }
     }
 }

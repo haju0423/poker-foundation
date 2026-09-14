@@ -77,12 +77,13 @@ namespace Poker.Foundation.Tests
         }
 
         [Test]
-        public void ResetReminderAppearsAtCompletionAndInOptInHelp()
+        public void CompletionOffersChipCarryoverAndHelpDistinguishesReset()
         {
             var session = Start(); Act(session, BettingAction.Fold());
-            Assert.That(KoreanTableText.Instruction(View(session, A), false), Does.Contain("칩이 초기화"));
-            Assert.That(KoreanTableText.Rules, Does.Contain("상대 패는 아직 공개하지 않아요"));
-            Assert.That(KoreanTableText.Rules, Does.Contain("칩이 초기화"));
+            Assert.That(KoreanTableText.Instruction(View(session, A), false), Does.Contain("보유한 칩으로 이어가요"));
+            Assert.That(KoreanTableText.Rules, Does.Contain("쇼다운에서는 남은 참가자의 패를 공개"));
+            Assert.That(KoreanTableText.Rules, Does.Contain("처음부터는 칩을 초기화"));
+            Assert.That(KoreanTableText.ShowdownSummary(View(session, A)), Is.EqualTo("상대 승리 · 나 폴드 · 패 비공개"));
         }
 
         [Test]
@@ -132,7 +133,7 @@ namespace Poker.Foundation.Tests
             Assert.That(details, Does.Contain("최종 보유"));
             Assert.That(details, Does.Contain("마지막 패를 비교"));
             Assert.That(details, Does.Not.Contain("140칩 지급"));
-            Assert.That(details, Does.Not.Contain("스트레이트"));
+            Assert.That(details, Does.Contain(KoreanPokerText.HandName(view.Result.RevealedHands[0].Value)));
         }
 
         [Test]
@@ -145,6 +146,17 @@ namespace Poker.Foundation.Tests
                 + "최종 보유 · 나 99칩 / 상대 101칩\n지급액은 순이익과 달라요. 반환된 칩은 최종 보유 칩에 이미 포함돼요."));
         }
 
+        [TestCase("As Ad 9h 7c 2s", "Ks Kd Qh Jc 8s", "페어 A > K")]
+        [TestCase("As Ad Kh 7c 2s", "Ah Ac Qh Jc 8s", "키커 1 K > Q")]
+        [TestCase("As Ad Kh Kc 2s", "Ah Ac Qh Qc Ks", "낮은 페어 K > Q")]
+        [TestCase("2s 3d 4h 5c 6s", "Ah 2c 3h 4c 5s", "가장 높은 카드 6 > 5")]
+        [TestCase("As Ad Kh Kc 2s", "Ah Ac Qh Jc 8s", "투페어 > 원페어")]
+        public void WinnerReasonUsesTheActualFirstDifferentComparison(string winner, string loser, string expected)
+        {
+            Func<string, HandValue> value = notation => HandEvaluator.Evaluate(notation.Split(' ').Select(token =>
+                new Card((Rank)("23456789TJQKA".IndexOf(token[0]) + 2), (Suit)("cdhs".IndexOf(token[1]) + 1))).ToArray());
+            Assert.That(KoreanTableText.ComparisonReason(value(winner), value(loser)), Does.Contain(expected));
+        }
         private static PokerPlayerView View(PokerHandSession session, SeatId viewer) => PokerPlayerViewProjector.Create(session, viewer);
         private static PublicSeatView Seat(PokerHandSession session, SeatId seat) => View(session, A).Seats.Single(s => s.Seat == seat);
         private static PokerHandSession Start(long otherStack = 100)

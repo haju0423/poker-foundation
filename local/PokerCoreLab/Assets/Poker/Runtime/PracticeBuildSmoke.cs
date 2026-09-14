@@ -145,8 +145,11 @@ namespace Poker.Runtime
         {
             if (Completed) return;
             Require(table != null && table.isActiveAndEnabled, "Active scene was lost.");
-            Require(root.Query<Button>(className: "card").ToList().Count == 5
-                && root.Query<VisualElement>(className: "card-back").ToList().Count == 5, "Expected own cards and opponent backs.");
+            int backs = root.Query<VisualElement>(className: "card-back").ToList().Count;
+            int revealed = root.Query<VisualElement>(className: "revealed-card").ToList().Count;
+            Require(root.Query<Button>(className: "card").ToList().Count == 5 && backs + revealed == 5,
+                "Expected own cards and exactly five opponent cards.");
+            Require(table.Progress.Phase == HandPhase.Complete || revealed == 0, "Opponent cards revealed before completion.");
             Require(root.Q<Label>(className: "title")?.text == KoreanTableText.Title, "Korean title is unavailable.");
             var progress = table.Progress;
             if (stage == 0)

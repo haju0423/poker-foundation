@@ -78,10 +78,41 @@ namespace Poker.Runtime.Tests
             yield return WaitFor(() => bootstrap.Progress.Phase == HandPhase.SecondBetting && bootstrap.Progress.OwnTurn);
             SubmitPassiveLegalResponse();
             yield return WaitFor(() => bootstrap.Progress.Phase == HandPhase.Complete);
+            Assert.That(document.rootVisualElement.Query<VisualElement>(className: "revealed-card").ToList().Count, Is.EqualTo(5));
+            Assert.That(document.rootVisualElement.Query<VisualElement>(className: "card-back").ToList(), Is.Empty);
+            Assert.That(document.rootVisualElement.Q<Label>(className: "showdown-result").text, Does.Match("승리|무승부"));
             Assert.That(document.rootVisualElement.Q<Button>("new-practice").resolvedStyle.display, Is.EqualTo(DisplayStyle.Flex));
             yield return null; AssertLayout(); Capture("result");
+            foreach (var size in new[] { new Vector2Int(960, 640), new Vector2Int(1280, 720) })
+            {
+                yield return Resize(size); Capture("showdown-" + size.x + "x" + size.y);
+                AssertLayout(); AssertHorizontalBounds();
+                foreach (var card in document.rootVisualElement.Query<VisualElement>(className: "revealed-card").ToList())
+                    foreach (var label in card.Query<Label>().ToList())
+                    {
+                        Assert.That(label.worldBound.yMin, Is.GreaterThanOrEqualTo(card.worldBound.yMin));
+                        Assert.That(label.worldBound.yMax, Is.LessThanOrEqualTo(card.worldBound.yMax));
+                    }
+                Capture("showdown-" + size.x + "x" + size.y);
+            }
             Submit("new-practice");
             Assert.That(bootstrap.Progress.Phase, Is.EqualTo(HandPhase.FirstBetting)); Assert.That(bootstrap.Progress.Version, Is.EqualTo(1));
+        }
+        [UnityTest]
+        public IEnumerator NextHandCarriesSettledChipsAndOnlyExplicitRestartResetsThem()
+        {
+            Submit("fold"); Submit("next-hand"); yield return null;
+            var root = document.rootVisualElement;
+            Assert.That(root.Query<Label>(className: "seat-title").ToList().Select(x => x.text),
+                Is.EquivalentTo(new[] { "나  ·  98칩", "상대  ·  99칩" }));
+            Assert.That(root.Query<VisualElement>(className: "card-back").ToList().Count, Is.EqualTo(5));
+            Assert.That(root.Query<VisualElement>(className: "revealed-card").ToList(), Is.Empty);
+            Submit("fold"); Submit("next-hand"); yield return null;
+            Assert.That(root.Query<Label>(className: "seat-title").ToList().Select(x => x.text),
+                Is.EquivalentTo(new[] { "나  ·  97칩", "상대  ·  100칩" }));
+            Submit("fold"); Submit("new-practice"); yield return null;
+            Assert.That(root.Query<Label>(className: "seat-title").ToList().Select(x => x.text),
+                Is.EquivalentTo(new[] { "나  ·  99칩", "상대  ·  98칩" }));
         }
         [UnityTest]
         public IEnumerator ZeroCardConfirmationIsVisibleAndCompletesExchange()
@@ -113,7 +144,8 @@ namespace Poker.Runtime.Tests
             Assert.That(document.rootVisualElement.Q<Label>(className: "last-action").text, Is.EqualTo("나 · 폴드 · 상대에게 1칩 반환"));
             Assert.That(document.rootVisualElement.Query<VisualElement>(className: "card-back").ToList().Count, Is.EqualTo(5));
             yield return null;
-            Assert.That(document.rootVisualElement.Q<Label>(className: "last-action").resolvedStyle.display, Is.EqualTo(DisplayStyle.Flex));
+            Assert.That(document.rootVisualElement.Q<Label>(className: "last-action").resolvedStyle.display, Is.EqualTo(DisplayStyle.None));
+            Assert.That(document.rootVisualElement.Q<Label>(className: "showdown-result").text, Is.EqualTo("상대 승리 · 나 폴드 · 패 비공개"));
         }
         [UnityTest]
         public IEnumerator DefaultOpponentRespondsToHumanRaiseWithoutStalling()
@@ -237,7 +269,7 @@ namespace Poker.Runtime.Tests
             Assert.That(bootstrap.Progress.Phase, Is.EqualTo(HandPhase.Complete)); Assert.That(bootstrap.Progress.Version, Is.EqualTo(before));
             Assert.That(document.rootVisualElement.Q<Button>("new-practice"), Is.SameAs(restart));
             Assert.That(document.rootVisualElement.Q<Label>(className: "result").text, Is.EqualTo(result));
-            Assert.That(document.rootVisualElement.Q<Label>(className: "message").text, Does.Contain("새 연습을 시작하지 못했어요"));
+            Assert.That(document.rootVisualElement.Q<Label>(className: "message").text, Does.Contain("현재 정산 결과를 유지"));
             AssertLayout(); Capture("restart-settings-error");
             settings.startingStack = 100; Submit(restart);
             Assert.That(bootstrap.Progress.Phase, Is.EqualTo(HandPhase.FirstBetting));
@@ -725,7 +757,7 @@ namespace Poker.Runtime.Tests
                 Assert.That(card.worldBound.xMin, Is.GreaterThanOrEqualTo(root.worldBound.xMin));
                 Assert.That(card.worldBound.xMax, Is.LessThanOrEqualTo(root.worldBound.xMax));
             }
-            foreach (string name in new[] { "instruction", "amount-row", "actions", "last-action", "result" })
+            foreach (string name in new[] { "instruction", "amount-row", "actions", "last-action", "result", "showdown-result" })
             {
                 VisualElement element = root.Q<VisualElement>(className: name);
                 if (element.resolvedStyle.display == DisplayStyle.None) continue;

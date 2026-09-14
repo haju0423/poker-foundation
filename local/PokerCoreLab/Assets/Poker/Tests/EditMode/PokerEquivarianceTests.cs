@@ -195,6 +195,8 @@ namespace Poker.Foundation.Tests
                 result.viewerSeat = seat(result.viewerSeat);
                 foreach (var row in result.seats) row.seat = seat(row.seat);
                 foreach (var refund in result.refunds) refund.seat = seat(refund.seat);
+                foreach (var hand in result.revealedHands)
+                { hand.seat = seat(hand.seat); hand.cards = hand.cards.Select(card).ToArray(); }
                 foreach (var pot in result.pots)
                 {
                     // Preserve positions: relabeling IDs is not permission to change the visible order.

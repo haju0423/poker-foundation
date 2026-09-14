@@ -14,11 +14,12 @@ namespace Poker.Runtime
         private readonly VisualElement root;
         private readonly PokerInputController input;
         private readonly Action newPractice;
+        private readonly Action nextHand;
         private readonly Action retryProgress;
         private readonly long startingStack;
-        private Label phase, instruction, pot, ownStack, otherStack, ownStatus, otherStatus, result, handName, amountHint, message, lastAction, breakdown;
-        private VisualElement ownCards, actionRow, amountRow, help, resultOverlay;
-        private Button fold, check, call, aggressive, exchange, restart, retry, resultDetails, minimum, halfPot, maximum, progressRetry;
+        private Label phase, instruction, pot, ownStack, otherStack, ownStatus, otherStatus, result, handName, amountHint, message, lastAction, breakdown, otherHandName, showdown;
+        private VisualElement ownCards, otherCards, actionRow, amountRow, help, resultOverlay;
+        private Button fold, check, call, aggressive, exchange, restart, continueHand, retry, resultDetails, minimum, halfPot, maximum, progressRetry;
         private TextField target;
         private long renderedVersion = -1;
         private bool disposed;
@@ -27,12 +28,13 @@ namespace Poker.Runtime
         private PracticeProgressFailure progressFailure;
 
         public PokerTableScreen(VisualElement root, PokerInputController input, Action newPractice, long startingStack, Font font,
-            Action retryProgress = null)
+            Action retryProgress = null, Action nextHand = null)
         {
             this.root = root ?? throw new ArgumentNullException(nameof(root));
             this.input = input ?? throw new ArgumentNullException(nameof(input));
             this.newPractice = newPractice ?? throw new ArgumentNullException(nameof(newPractice));
             this.retryProgress = retryProgress;
+            this.nextHand = nextHand;
             this.startingStack = startingStack;
             if (startingStack <= 0) throw new ArgumentOutOfRangeException(nameof(startingStack));
             if (input.View.Seats.Count != 2)
@@ -69,8 +71,12 @@ namespace Poker.Runtime
                     : KoreanTableText.Status(seat) + (view.CurrentSeat == seat.Seat ? " · 차례" : "");
             }
             result.text = KoreanTableText.Result(view);
+            Show(ownStatus, view.Result == null); Show(otherStatus, view.Result == null);
             lastAction.text = KoreanTableText.LastAction(view);
-            Show(lastAction, lastAction.text.Length > 0);
+            Show(lastAction, lastAction.text.Length > 0 && view.Result == null);
+            showdown.text = KoreanTableText.ShowdownSummary(view);
+            Show(showdown, view.Result != null);
+            RenderOtherHand(view);
             Show(result, view.Result != null);
             Show(resultDetails, view.Result != null);
             breakdown.text = KoreanTableText.ResultDetails(view);
@@ -107,6 +113,7 @@ namespace Poker.Runtime
             Show(exchange, view.CanExchange); exchange.SetEnabled(active);
             exchange.text = KoreanPokerText.ExchangeLabel(input.SelectedCount);
             Show(restart, view.Phase == HandPhase.Complete); restart.SetEnabled(active);
+            Show(continueHand, nextHand != null && KoreanTableText.CanContinue(view)); continueHand.SetEnabled(active);
             Show(retry, input.IsPending);
             retry.SetEnabled(input.IsPending && progressFailure == PracticeProgressFailure.None);
             if (changed) message.text = "";
@@ -146,7 +153,7 @@ namespace Poker.Runtime
             progressRetry.text = action ? "상대 진행 다시 시도" : "화면 다시 확인";
             message.text = action ? "상대 행동을 처리하지 못했어요. 현재 판을 유지한 채 다시 시도할 수 있어요."
                 : "화면을 갱신하지 못했어요. 행동을 다시 실행하지 않고 현재 상태만 확인해요.";
-            foreach (var button in new[] { fold, check, call, aggressive, exchange, restart, retry })
+            foreach (var button in new[] { fold, check, call, aggressive, exchange, restart, continueHand, retry })
             { Show(button, false); button.SetEnabled(false); }
             Show(amountRow, false); target.SetEnabled(false);
             minimum.SetEnabled(false); halfPot.SetEnabled(false); maximum.SetEnabled(false);
@@ -164,11 +171,15 @@ namespace Poker.Runtime
             var other = Box("opponent", table);
             otherStack = Text("", "seat-title"); other.Add(otherStack);
             otherStatus = Text("", "seat-status"); other.Add(otherStatus);
-            var backs = Box("backs", other);
-            for (int i = 0; i < SeatHand.CardCount; i++) { var back = Box("card-back", backs); back.Add(Text("?", "back-mark")); }
+            otherCards = Box("backs", other);
+            otherHandName = Text("", "hand-name"); other.Add(otherHandName);
             var center = Box("center-pot", table);
             pot = Text("", "pot-value"); center.Add(pot);
+            showdown = Text("", "showdown-result"); center.Add(showdown);
+            showdown.style.fontSize = 19; showdown.style.unityFontStyleAndWeight = FontStyle.Bold;
+            showdown.style.marginTop = 0; showdown.style.marginBottom = 0;
             result = Text("", "result"); center.Add(result);
+            result.style.marginTop = 0; result.style.marginBottom = 0;
             lastAction = Text("", "last-action"); center.Add(lastAction);
             resultDetails = Click("정산 내역", "result-details", () =>
             {
@@ -199,9 +210,15 @@ namespace Poker.Runtime
             aggressive = Click("베팅", "aggressive", Aggress);
             exchange = Click("", "exchange", () => Run(input.Exchange));
             restart = Click(KoreanTableText.NewPractice(startingStack), "new-practice", RestartPractice);
+            continueHand = Click("다음 판 · 칩 유지", "next-hand", () => StartCompletedHand(nextHand));
+            continueHand.style.backgroundColor = (Color)new Color32(210, 180, 121, 255);
+            continueHand.style.color = (Color)new Color32(20, 47, 52, 255);
+            restart.style.backgroundColor = (Color)new Color32(38, 49, 56, 255);
+            restart.style.color = (Color)new Color32(189, 197, 190, 255);
+            restart.tooltip = "양쪽 보유 칩을 초기화하고 처음부터 시작해요. 현재 칩을 유지하려면 다음 판을 누르세요.";
             retry = Click(KoreanTableText.Retry, "retry", () => Run(input.RetryPending));
             progressRetry = Click("진행 다시 확인", "progress-retry", RetryProgress);
-            foreach (Button button in new[] { fold, check, call, aggressive, exchange, restart, retry, progressRetry }) actionRow.Add(button);
+            foreach (Button button in new[] { fold, check, call, aggressive, exchange, continueHand, restart, retry, progressRetry }) actionRow.Add(button);
             message = Text("", "message"); controls.Add(message);
             help = Box("help-overlay", root);
             help.Add(Text("플레이 방법", "help-title")); help.Add(Text(KoreanTableText.Rules, "help-text"));
@@ -210,6 +227,34 @@ namespace Poker.Runtime
             resultOverlay.Add(Text("이번 판 정산", "help-title"));
             breakdown = Text("", "help-text"); resultOverlay.Add(breakdown);
             resultOverlay.Add(Click("닫기", "close-result", () => Show(resultOverlay, false))); Show(resultOverlay, false);
+        }
+        private void RenderOtherHand(PokerPlayerView view)
+        {
+            RevealedHandView revealed = null;
+            if (view.Result != null)
+                foreach (var hand in view.Result.RevealedHands)
+                    if (hand.Seat != view.ViewerSeat) { revealed = hand; break; }
+            otherCards.Clear();
+            otherHandName.text = revealed == null ? "" : "상대 패 · " + KoreanPokerText.HandName(revealed.Value);
+            Show(otherHandName, revealed != null);
+            for (int i = 0; i < SeatHand.CardCount; i++)
+            {
+                if (revealed == null)
+                {
+                    var back = Box("card-back", otherCards); back.Add(Text("?", "back-mark"));
+                    continue;
+                }
+                Card card = revealed.Cards[i];
+                var face = Box("card", otherCards); face.AddToClassList("revealed-card");
+                face.name = "revealed-card-" + card.Id; face.tooltip = KoreanPokerText.CardName(card);
+                face.style.width = 62; face.style.minWidth = 62; face.style.height = 64;
+                face.style.marginLeft = 4; face.style.marginRight = 4; face.style.paddingTop = 3; face.style.paddingBottom = 3;
+                face.EnableInClassList("red-card", card.Suit == Suit.Hearts || card.Suit == Suit.Diamonds);
+                var rank = Text(KoreanTableText.RankLabel(card), "rank"); rank.style.fontSize = 25;
+                rank.style.height = 30; rank.style.flexShrink = 0; rank.style.marginTop = 0; rank.style.marginBottom = 0; face.Add(rank);
+                var suit = Text(KoreanTableText.SuitLabel(card), "suit"); suit.style.fontSize = 12;
+                suit.style.height = 18; suit.style.flexShrink = 0; suit.style.marginTop = 0; suit.style.marginBottom = 0; face.Add(suit);
+            }
         }
         private void Run(Func<bool> action)
         {
@@ -246,14 +291,17 @@ namespace Poker.Runtime
                 Debug.LogError("Poker input display failed (" + error.GetType().Name + "); action was not replayed.");
             }
         }
-        private void RestartPractice()
+        private void RestartPractice() => StartCompletedHand(newPractice);
+        private void StartCompletedHand(Action start)
         {
-            if (disposed || progressFailure != PracticeProgressFailure.None || input.IsPending || input.View.Phase != HandPhase.Complete) return;
-            try { newPractice(); }
+            if (start == null || disposed || progressFailure != PracticeProgressFailure.None || input.IsPending || input.View.Phase != HandPhase.Complete) return;
+            if (start == nextHand && !KoreanTableText.CanContinue(input.View)) return;
+            try { start(); }
             catch (Exception error)
             {
                 // Only report the failure; do not invent a successful next hand or automatically reset.
-                if (!disposed) message.text = "새 연습을 시작하지 못했어요. 설정을 확인한 뒤 다시 시도해 주세요.";
+                if (!disposed) message.text = (start == nextHand ? "다음 판을 시작하지 못했어요." : "처음부터 시작하지 못했어요.")
+                    + " 현재 정산 결과를 유지하고 있어요.";
                 Debug.LogError("Poker practice start failed (" + error.GetType().Name + "); no automatic retry was performed.");
             }
         }

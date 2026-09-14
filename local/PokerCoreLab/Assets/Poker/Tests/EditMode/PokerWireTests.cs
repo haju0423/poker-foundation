@@ -397,11 +397,46 @@ namespace Poker.Foundation.Tests
             Surface<PokerWireSeat>("seat stack committed streetContribution awarded folded allIn");
             Surface<PokerWireBetting>("canFold canCheck canCall canBet canRaise callAmount minimumAggressiveTarget maximumAggressiveTarget");
             Surface<PokerWireTransition>("handId appliedVersion beforePhase afterPhase kind action targetTotal chipsPaid refundedAmount seat exchangeCount refundedSeat");
-            Surface<PokerWireResult>("handId version reason totalAwarded viewerSeat seats pots refunds");
+            Surface<PokerWireResult>("handId version reason totalAwarded viewerSeat seats pots refunds revealedHands");
+            Surface<PokerWireRevealedHand>("seat cards");
             Surface<PokerWireSeatResult>("seat finalStack grossAward");
             Surface<PokerWirePot>("lowerBound contributionCap amount eligibleSeats payouts");
             Surface<PokerWirePayout>("seat amount hasOddChip"); Surface<PokerWireRefund>("bettingPhase amount seat");
             Assert.That(typeof(PokerWireSnapshot).Assembly.GetReferencedAssemblies().Any(a => a.Name.StartsWith("UnityEngine", StringComparison.Ordinal)), Is.False);
+        }
+
+        [TestCase("missing")][TestCase("order")][TestCase("duplicate-seat")][TestCase("duplicate-card")]
+        [TestCase("own-mismatch")][TestCase("unknown-seat")][TestCase("old-version")]
+        public void ShowdownWireRejectsInvalidPublicHandClaims(string corruption)
+        {
+            var session = Start(100, 100);
+            while (session.State.CurrentSeat.HasValue) Passive(session);
+            var dto = PokerWireMapper.ToWire(PokerPlayerViewProjector.Create(session, A));
+            Assert.That(dto.protocolVersion, Is.EqualTo(2));
+            Assert.That(dto.result[0].revealedHands, Has.Length.EqualTo(2));
+            var hands = dto.result[0].revealedHands;
+            switch (corruption)
+            {
+                case "missing": dto.result[0].revealedHands = Array.Empty<PokerWireRevealedHand>(); break;
+                case "order": Array.Reverse(hands); break;
+                case "duplicate-seat": hands[1].seat = hands[0].seat; break;
+                case "duplicate-card": hands[1].cards[0] = hands[0].cards[0]; break;
+                case "own-mismatch": Array.Reverse(hands[0].cards); break;
+                case "unknown-seat": hands[1].seat = 999; break;
+                case "old-version": dto.protocolVersion = 1; break;
+            }
+            Assert.Throws<PokerWireException>(() => PokerWireMapper.Validate(dto));
+        }
+
+        [Test]
+        public void UncontestedWireCannotCarryEvenTheWinnersHand()
+        {
+            var session = Start(100, 100); Act(session, BettingAction.Fold());
+            var dto = PokerWireMapper.ToWire(PokerPlayerViewProjector.Create(session, A));
+            Assert.That(dto.result[0].revealedHands, Is.Empty);
+            dto.result[0].revealedHands = new[] { new PokerWireRevealedHand { seat = B.Value,
+                cards = session.State.GetHand(B).Select(card => card.Id).ToArray() } };
+            Assert.Throws<PokerWireException>(() => PokerWireMapper.Validate(dto));
         }
 
         private static void Surface<T>(string fields)
