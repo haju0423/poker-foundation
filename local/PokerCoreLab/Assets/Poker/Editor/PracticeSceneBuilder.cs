@@ -43,14 +43,22 @@ namespace Poker.Editor
             AssetDatabase.SaveAssets();
             Debug.Log("POKER_PRACTICE_SCENE_READY");
         }
-        public static void Build() => BuildPlayer(BuildOptions.None);
-        public static void BuildSmoke() => BuildPlayer(BuildOptions.Development);
-        private static void BuildPlayer(BuildOptions options)
+        public static void Build() => BuildPlayer(BuildTarget.StandaloneOSX, BuildOptions.None);
+        public static void BuildSmoke() => BuildPlayer(BuildTarget.StandaloneOSX, BuildOptions.Development);
+        public static void BuildWindows() => BuildPlayer(BuildTarget.StandaloneWindows64, BuildOptions.None);
+        public static void BuildWindowsSmoke() => BuildPlayer(BuildTarget.StandaloneWindows64, BuildOptions.Development);
+        private static void BuildPlayer(BuildTarget target, BuildOptions options)
         {
+            string path = Argument("-buildOutput");
+            if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Explicit -buildOutput is required.");
+            string extension = target == BuildTarget.StandaloneOSX ? ".app" : ".exe";
+            if (!string.Equals(Path.GetExtension(path), extension, StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("Build output must end with " + extension + ".");
+            path = Path.GetFullPath(path);
+            if (!BuildPipeline.IsBuildTargetSupported(BuildTargetGroup.Standalone, target))
+                throw new InvalidOperationException("Install the matching Unity build support module for " + target + ".");
             Create();
             ValidateSavedScene();
-            string path = Argument("-buildOutput");
-            if (string.IsNullOrEmpty(path)) throw new ArgumentException("Explicit -buildOutput is required.");
             PlayerSettings.fullScreenMode = FullScreenMode.Windowed;
             PlayerSettings.defaultScreenWidth = 1200; PlayerSettings.defaultScreenHeight = 800;
             PlayerSettings.resizableWindow = true;
@@ -58,7 +66,7 @@ namespace Poker.Editor
             BuildReport report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
             {
                 scenes = new[] { ScenePath }, locationPathName = path,
-                target = BuildTarget.StandaloneOSX, options = options
+                target = target, options = options
             });
             if (report.summary.result != BuildResult.Succeeded) throw new InvalidOperationException("Practice build failed.");
             File.Copy("Assets/Poker/Resources/Fonts/OFL.txt", Path.Combine(Path.GetDirectoryName(path), "FONT-LICENSE.txt"), true);
