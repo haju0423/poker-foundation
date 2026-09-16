@@ -1,0 +1,80 @@
+.omc-root { flex-grow: 1; background-color: #101a21; color: #f1eddf; padding: 16px 32px; font-size: 17px; }
+.omc-header { flex-direction: row; align-items: center; justify-content: space-between; height: 54px; flex-shrink: 0; }
+.omc-title { font-size: 28px; -unity-font-style: bold; }
+.omc-subtitle { font-size: 12px; color: #91aba7; margin-top: 3px; }
+.omc-header-right, .omc-stages, .omc-cards, .omc-seat, .omc-amounts, .omc-actions { flex-direction: row; align-items: center; justify-content: center; }
+.omc-counter { color: #b2c1b9; font-size: 14px; margin-right: 16px; }
+.omc-stages { height: 30px; flex-shrink: 0; margin-bottom: 5px; }
+.omc-stage { color: #738e89; padding: 4px 18px; margin: 0 4px; border-bottom-width: 2px; border-bottom-color: #243b3c; font-size: 13px; }
+.omc-stage.current { color: #f2d18d; border-bottom-color: #d6b773; }
+.omc-stage.past { color: #b8c7b9; border-bottom-color: #507b69; }
+.omc-table { flex-grow: 1; min-height: 410px; background-color: #183f38; border-width: 6px; border-color: #34564a; border-radius: 130px; margin: 6px 0 10px 0; padding: 12px 34px; align-items: center; justify-content: space-between; }
+.omc-seat { flex-shrink: 0; }
+.omc-seat-info { width: 170px; margin-right: 18px; }
+.omc-seat-title { font-size: 18px; -unity-font-style: bold; }
+.omc-stack { font-size: 24px; color: #eee7cf; margin-top: 3px; }
+.omc-seat-status { font-size: 12px; color: #aec4b7; margin-top: 3px; }
+.omc-seat-name.acting { color: #f4d28d; }
+.omc-opponent .omc-card { width: 58px; height: 77px; }
+.omc-player .omc-card { width: 84px; height: 105px; }
+.omc-middle { align-items: center; flex-shrink: 0; }
+.omc-pot { font-size: 26px; color: #efd197; -unity-font-style: bold; margin-bottom: 5px; }
+.omc-board { height: 112px; }
+.omc-card { width: 76px; height: 100px; margin: 0 6px; border-radius: 8px; padding: 6px 8px; background-color: #f3efdf; border-width: 2px; border-color: #d2d6c5; color: #1d3540; justify-content: space-between; align-items: center; flex-shrink: 0; }
+.omc-card.red { color: #ad4642; }
+.omc-card.best { border-color: #ffc969; border-width: 3px; background-color: #fff2cd; }
+.omc-rank { font-size: 28px; -unity-font-style: bold; margin: 0; padding: 0; }
+.omc-suit { font-size: 24px; margin: 0; padding: 0; }
+.omc-opponent .omc-rank { font-size: 21px; }
+.omc-opponent .omc-suit { font-size: 20px; }
+.omc-card.hidden { background-color: #254852; border-color: #9a936c; justify-content: center; }
+.omc-back { color: #d4bf86; font-size: 24px; }
+.omc-card.empty { background-color: #1b463e; border-color: #3b6255; justify-content: center; }
+.omc-placeholder { color: #6f9785; font-size: 12px; }
+.omc-result { font-size: 18px; color: #f6d697; min-height: 23px; margin-top: 4px; }
+.omc-last { font-size: 13px; color: #b1c7b9; min-height: 20px; }
+.omc-hand-label { font-size: 12px; color: #c6d4bc; margin-top: 3px; -unity-text-align: middle-center; }
+.omc-controls { height: 155px; flex-shrink: 0; align-items: center; }
+.omc-root.complete .omc-controls { height: 110px; }
+.omc-prompt { font-size: 18px; -unity-font-style: bold; min-height: 26px; margin: 3px 0; }
+Button { height: 38px; min-width: 74px; padding: 4px 15px; margin: 3px; border-radius: 7px; border-width: 1px; border-color: #61726a; background-color: #273d3e; color: #eee9d9; font-size: 15px; }
+Button:hover { background-color: #3c5752; border-color: #e5c782; }
+Button:active { background-color: #657563; }
+Button:disabled { opacity: 0.35; }
+.omc-actions Button { min-width: 142px; height: 42px; font-size: 17px; }
+.omc-primary { background-color: #d5b57c; border-color: #e4ca99; color: #152e30; -unity-font-style: bold; }
+.omc-primary:hover { background-color: #f3d49d; }
+.omc-quiet { background-color: #253037; color: #b3c0b8; }
+.omc-amounts { height: 39px; flex-shrink: 0; }
+.omc-amounts Button { height: 29px; min-width: 50px; font-size: 12px; padding: 3px 10px; }
+.omc-caption, .omc-amount-hint { font-size: 12px; color: #9cb2a7; margin: 0 8px; }
+.omc-target { width: 100px; height: 30px; font-size: 17px; }
+.omc-target .unity-text-element { color: #193b34; }
+.omc-target > .unity-text-field__input { padding-top: 0; padding-bottom: 0; }
+.omc-error { font-size: 12px; color: #f0bb99; min-height: 19px; }
+.omc-overlay { position: absolute; left: 0; right: 0; top: 0; bottom: 0; background-color: rgba(10, 18, 23, 0.91); align-items: center; justify-content: center; }
+.omc-help-card { width: 510px; padding: 24px; background-color: #1b3034; border-radius: 12px; border-width: 1px; border-color: #a3956d; }
+.omc-help-title { font-size: 24px; -unity-font-style: bold; margin-bottom: 16px; }
+.omc-help-copy { white-space: normal; font-size: 16px; margin-bottom: 16px; }
+.omc-root.compact { padding: 8px 18px; }
+.compact .omc-header { height: 46px; }
+.compact .omc-title { font-size: 24px; }
+.compact .omc-stages { height: 25px; margin-bottom: 0; }
+.compact .omc-table { min-height: 330px; border-width: 4px; border-radius: 90px; padding: 8px 24px; margin-bottom: 5px; }
+.compact .omc-opponent .omc-card { width: 46px; height: 62px; }
+.compact .omc-opponent .omc-rank { font-size: 17px; }
+.compact .omc-opponent .omc-suit { font-size: 16px; }
+.compact .omc-player .omc-card { width: 68px; height: 86px; }
+.compact .omc-card { width: 62px; height: 80px; padding: 4px; margin: 0 5px; }
+.compact .omc-rank { font-size: 23px; }
+.compact .omc-suit { font-size: 20px; }
+.compact .omc-board { height: 87px; }
+.compact .omc-pot { font-size: 21px; margin-bottom: 2px; }
+.compact .omc-result { font-size: 15px; min-height: 20px; margin-top: 1px; }
+.compact .omc-last { font-size: 12px; min-height: 17px; }
+.compact .omc-stack { font-size: 20px; }
+.compact .omc-seat-title { font-size: 16px; }
+.compact .omc-controls { height: 137px; }
+.omc-root.complete.compact .omc-controls { height: 100px; }
+.compact .omc-prompt { font-size: 16px; min-height: 23px; }
+.compact .omc-actions Button { height: 38px; font-size: 15px; min-width: 126px; }

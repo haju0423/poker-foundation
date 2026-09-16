@@ -19,6 +19,7 @@ research/
 verification/
 DEVLOG.md
 HANDOFF.md
+/docs/holdem-blueprint.md
 
 # Local credentials and signing material must never be shared.
 .env
