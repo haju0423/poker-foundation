@@ -1,134 +1,123 @@
 using System;
+using System.Collections.Generic;
 
 namespace Poker.Foundation
 {
-    /// <summary>Heads-up payout result whose showdown comparison permits a shared community board.</summary>
+    /// <summary>Community-card result backed by the shared multi-pot settlement engine.</summary>
     public sealed class HoldemSettlement
     {
-        private readonly long firstAward;
-        private readonly long secondAward;
-        private readonly HoldemEvaluatedHand firstHand;
-        private readonly HoldemEvaluatedHand secondHand;
+        private readonly PotSettlement payment;
+        private readonly SeatId[] showdownSeats;
+        private readonly HoldemEvaluatedHand[] showdownHands;
+        private readonly SeatId compatibilityFirstSeat;
+        private readonly SeatId compatibilitySecondSeat;
 
-        private HoldemSettlement(ChipLedger ledger, SeatId firstSeat, SeatId secondSeat,
-            HoldemResultKind kind, long potAmount, long firstAward, long secondAward,
-            SeatId? winnerSeat, SeatId? foldedSeat, HoldemEvaluatedHand firstHand,
-            HoldemEvaluatedHand secondHand)
+        private HoldemSettlement(PotSettlement payment, HoldemResultKind kind,
+            SeatId? lastFoldedSeat, SeatId[] ownedShowdownSeats,
+            HoldemEvaluatedHand[] ownedShowdownHands, SeatId firstSeat, SeatId secondSeat)
         {
-            Ledger = ledger;
-            FirstSeat = firstSeat;
-            SecondSeat = secondSeat;
+            this.payment = payment ?? throw new ArgumentNullException(nameof(payment));
             Kind = kind;
-            PotAmount = potAmount;
-            this.firstAward = firstAward;
-            this.secondAward = secondAward;
-            WinnerSeat = winnerSeat;
-            FoldedSeat = foldedSeat;
-            this.firstHand = firstHand;
-            this.secondHand = secondHand;
+            FoldedSeat = lastFoldedSeat;
+            showdownSeats = ownedShowdownSeats ?? Array.Empty<SeatId>();
+            showdownHands = ownedShowdownHands ?? Array.Empty<HoldemEvaluatedHand>();
+            compatibilityFirstSeat = firstSeat;
+            compatibilitySecondSeat = secondSeat;
+            WinnerSeat = FindSoleRecipient(payment);
         }
 
-        public ChipLedger Ledger { get; }
-        public SeatId FirstSeat { get; }
-        public SeatId SecondSeat { get; }
+        public ChipLedger Ledger => payment.Ledger;
         public HoldemResultKind Kind { get; }
-        public long PotAmount { get; }
-        /// <summary>Null only for a tied showdown.</summary>
+        public long PotAmount => payment.TotalAwarded;
+        public int PotCount => payment.PotCount;
+        /// <summary>Set only when exactly one seat receives chips from the result.</summary>
         public SeatId? WinnerSeat { get; }
-        /// <summary>Set only when the hand ended by fold.</summary>
+        /// <summary>Compatibility detail for heads-up folds; multi-seat hands may have earlier folds.</summary>
         public SeatId? FoldedSeat { get; }
+        public SeatId FirstSeat => CompatibilitySeat(compatibilityFirstSeat);
+        public SeatId SecondSeat => CompatibilitySeat(compatibilitySecondSeat);
 
-        public long GetAwardedTo(SeatId seat)
+        public PotAward GetPot(int index) => payment.GetPot(index);
+        public long GetAwardedTo(SeatId seat) => payment.GetAwardedTo(seat);
+
+        public bool HasHandValue(SeatId seat)
         {
-            if (seat == FirstSeat) return firstAward;
-            if (seat == SecondSeat) return secondAward;
-            throw new ArgumentException("The seat is not part of this heads-up result.", nameof(seat));
+            for (int i = 0; i < showdownSeats.Length; i++) if (showdownSeats[i] == seat) return true;
+            Ledger.GetChips(seat);
+            return false;
         }
 
         public HandValue GetHandValue(SeatId seat) => GetEvaluatedHand(seat).Value;
-
         public Card GetBestCard(SeatId seat, int index) => GetEvaluatedHand(seat).GetBestCard(index);
 
-        internal static HoldemSettlement Showdown(ChipLedger ledger, SeatId firstSeat, SeatId secondSeat,
-            HoldemEvaluatedHand firstHand, HoldemEvaluatedHand secondHand)
+        internal static HoldemSettlement Showdown(ChipLedger ledger,
+            IReadOnlyList<SeatId> liveSeats, IReadOnlyList<HoldemEvaluatedHand> liveHands,
+            IReadOnlyList<SeatId> oddChipPriority, SeatId compatibilityFirstSeat,
+            SeatId compatibilitySecondSeat)
         {
-            RequireHeadsUpLedger(ledger, firstSeat, secondSeat);
-            if (firstHand == null) throw new ArgumentNullException(nameof(firstHand));
-            if (secondHand == null) throw new ArgumentNullException(nameof(secondHand));
-            long firstPaid = ledger.GetChips(firstSeat).Committed;
-            long secondPaid = ledger.GetChips(secondSeat).Committed;
-            if (firstPaid <= 0 || firstPaid != secondPaid)
-                throw new SettlementException(firstPaid == 0 && secondPaid == 0
-                    ? SettlementFailure.NothingToAward : SettlementFailure.UnmatchedContribution);
-
-            long pot = checked(firstPaid + secondPaid);
-            long firstAward;
-            long secondAward;
-            SeatId? winner;
-            int comparison = firstHand.Value.CompareTo(secondHand.Value);
-            if (comparison > 0) { firstAward = pot; secondAward = 0; winner = firstSeat; }
-            else if (comparison < 0) { firstAward = 0; secondAward = pot; winner = secondSeat; }
-            else
+            if (ledger == null) throw new ArgumentNullException(nameof(ledger));
+            if (liveSeats == null) throw new ArgumentNullException(nameof(liveSeats));
+            if (liveHands == null) throw new ArgumentNullException(nameof(liveHands));
+            if (liveSeats.Count < 2 || liveSeats.Count != liveHands.Count)
+                throw new ArgumentException("Showdown requires matching live seats and evaluated hands.");
+            var seats = new SeatId[liveSeats.Count];
+            var hands = new HoldemEvaluatedHand[liveHands.Count];
+            var ranked = new SeatHandValue[liveSeats.Count];
+            var seen = new HashSet<SeatId>();
+            for (int i = 0; i < seats.Length; i++)
             {
-                // A matched heads-up pot is always even, so no odd-chip policy is needed.
-                firstAward = firstPaid;
-                secondAward = secondPaid;
-                winner = null;
+                SeatId seat = liveSeats[i];
+                HoldemEvaluatedHand hand = liveHands[i];
+                if (!seat.IsValid || !seen.Add(seat) || hand == null)
+                    throw new ArgumentException("Showdown seats must be valid, unique and evaluated.");
+                ledger.GetChips(seat);
+                seats[i] = seat;
+                hands[i] = hand;
+                ranked[i] = new SeatHandValue(seat, hand.Value);
             }
-            ChipLedger paid = ledger.Distribute(AwardsInLedgerOrder(ledger, firstSeat, firstAward, secondSeat, secondAward));
-            return new HoldemSettlement(paid, firstSeat, secondSeat, HoldemResultKind.Showdown,
-                pot, firstAward, secondAward, winner, null, firstHand, secondHand);
+            PotSettlement paid = PotSettlement.ShowdownByValue(ledger, ranked, oddChipPriority);
+            return new HoldemSettlement(paid, HoldemResultKind.Showdown, null, seats, hands,
+                compatibilityFirstSeat, compatibilitySecondSeat);
         }
 
-        internal static HoldemSettlement AwardUncontested(ChipLedger ledger, SeatId firstSeat,
-            SeatId secondSeat, SeatId foldedSeat)
+        internal static HoldemSettlement AwardUncontested(ChipLedger ledger,
+            SeatId soleWinner, SeatId? lastFoldedSeat, SeatId compatibilityFirstSeat,
+            SeatId compatibilitySecondSeat)
         {
-            RequireHeadsUpLedger(ledger, firstSeat, secondSeat);
-            if (foldedSeat != firstSeat && foldedSeat != secondSeat)
-                throw new ArgumentException("The folded seat is not part of this heads-up hand.", nameof(foldedSeat));
-            SeatId winner = foldedSeat == firstSeat ? secondSeat : firstSeat;
-            long firstPaid = ledger.GetChips(firstSeat).Committed;
-            long secondPaid = ledger.GetChips(secondSeat).Committed;
-            if (firstPaid <= 0 || firstPaid != secondPaid)
-                throw new SettlementException(firstPaid == 0 && secondPaid == 0
-                    ? SettlementFailure.NothingToAward : SettlementFailure.UnmatchedContribution);
-            long pot = checked(firstPaid + secondPaid);
-            long firstAward = winner == firstSeat ? pot : 0;
-            long secondAward = winner == secondSeat ? pot : 0;
-            ChipLedger paid = ledger.Distribute(AwardsInLedgerOrder(ledger, firstSeat, firstAward, secondSeat, secondAward));
-            return new HoldemSettlement(paid, firstSeat, secondSeat, HoldemResultKind.Fold,
-                pot, firstAward, secondAward, winner, foldedSeat, null, null);
+            PotSettlement paid = PotSettlement.AwardUncontested(ledger, soleWinner);
+            return new HoldemSettlement(paid, HoldemResultKind.Fold,
+                lastFoldedSeat, null, null, compatibilityFirstSeat, compatibilitySecondSeat);
         }
 
         private HoldemEvaluatedHand GetEvaluatedHand(SeatId seat)
         {
             if (Kind != HoldemResultKind.Showdown)
                 throw new InvalidOperationException("Folded hands do not reveal private-card evaluations.");
-            if (seat == FirstSeat) return firstHand;
-            if (seat == SecondSeat) return secondHand;
-            throw new ArgumentException("The seat is not part of this heads-up result.", nameof(seat));
+            for (int i = 0; i < showdownSeats.Length; i++)
+                if (showdownSeats[i] == seat) return showdownHands[i];
+            Ledger.GetChips(seat);
+            throw new InvalidOperationException("This seat did not reach showdown.");
         }
 
-        private static void RequireHeadsUpLedger(ChipLedger ledger, SeatId firstSeat, SeatId secondSeat)
+        private SeatId CompatibilitySeat(SeatId seat)
         {
-            if (ledger == null) throw new ArgumentNullException(nameof(ledger));
-            if (!firstSeat.IsValid || !secondSeat.IsValid || firstSeat == secondSeat || ledger.SeatCount != 2)
-                throw new ArgumentException("Settlement requires exactly two distinct valid seats.");
-            ledger.GetChips(firstSeat);
-            ledger.GetChips(secondSeat);
+            if (Ledger.SeatCount != 2)
+                throw new InvalidOperationException("The heads-up seat alias is unavailable at a multi-seat table.");
+            Ledger.GetChips(seat);
+            return seat;
         }
 
-        private static long[] AwardsInLedgerOrder(ChipLedger ledger, SeatId firstSeat, long first,
-            SeatId secondSeat, long second)
+        private static SeatId? FindSoleRecipient(PotSettlement settlement)
         {
-            var awards = new long[2];
-            for (int i = 0; i < 2; i++)
+            SeatId? recipient = null;
+            for (int i = 0; i < settlement.Ledger.SeatCount; i++)
             {
-                SeatId seat = ledger.GetSeatAt(i);
-                awards[i] = seat == firstSeat ? first : seat == secondSeat ? second
-                    : throw new InvalidOperationException("Unexpected seat in a heads-up ledger.");
+                SeatId seat = settlement.Ledger.GetSeatAt(i);
+                if (settlement.GetAwardedTo(seat) == 0) continue;
+                if (recipient.HasValue) return null;
+                recipient = seat;
             }
-            return awards;
+            return recipient;
         }
     }
 }

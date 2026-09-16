@@ -25,6 +25,27 @@ namespace Poker.Foundation.Tests
         }
 
         [Test]
+        public void ValueOnlyShowdownReusesTheSameMultiPotAndOddChipEngine()
+        {
+            ChipLedger ledger = Paid(5, 10, 10, 7);
+            ShowdownHand a = Strong(A), b = Medium(B), c = Weak(C);
+            PotSettlement physical = PotSettlement.Showdown(ledger,
+                new[] { a, b, c }, new[] { B, C, A });
+            PotSettlement values = PotSettlement.ShowdownByValue(ledger,
+                new[] { new SeatHandValue(A, a.Value), new SeatHandValue(B, b.Value),
+                    new SeatHandValue(C, c.Value) }, new[] { B, C, A });
+            Assert.That(values.PotCount, Is.EqualTo(physical.PotCount));
+            foreach (SeatId seat in new[] { A, B, C, D })
+                Assert.That(values.GetAwardedTo(seat), Is.EqualTo(physical.GetAwardedTo(seat)));
+            for (int i = 0; i < values.PotCount; i++)
+            {
+                Assert.That(values.GetPot(i).Amount, Is.EqualTo(physical.GetPot(i).Amount));
+                Assert.That(values.GetPot(i).ContributionCap, Is.EqualTo(physical.GetPot(i).ContributionCap));
+            }
+            Assert.That(ledger.TotalCommitted, Is.EqualTo(32));
+        }
+
+        [Test]
         public void EachSidePotHasOnlyItsOwnEligibleWinnersAndFoldedMoneyStays()
         {
             PotSettlement result = PotSettlement.Showdown(Paid(30, 70, 100, 100),

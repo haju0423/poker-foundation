@@ -8,6 +8,7 @@ namespace Poker.Application
         HoldemSnapshot Read();
         HoldemReceipt Submit(HoldemCommand command);
         HoldemReceipt NextHand(long expectedVersion);
+        HoldemReceipt ResolvePendingSettlement(long expectedVersion);
         HoldemActionNotice LastAction { get; }
     }
 
@@ -27,28 +28,41 @@ namespace Poker.Application
         private readonly HoldemSession session;
         private readonly IHoldemOpponentPolicy opponent;
         private readonly IRandomSource opponentRandom;
+        private readonly SeatId humanSeat = new SeatId(1);
         private HoldemActionNotice lastAction;
 
         public HoldemLocalTable(HoldemConfig config, IRandomSource deckRandom,
             IRandomSource opponentRandom, IHoldemOpponentPolicy opponent = null)
+            : this(config, 2, deckRandom, opponentRandom, opponent) { }
+
+        public HoldemLocalTable(HoldemConfig config, int seatCount, IRandomSource deckRandom,
+            IRandomSource opponentRandom, IHoldemOpponentPolicy opponent = null,
+            HoldemOddChipRule oddChipRule = HoldemOddChipRule.RequireExplicitPriority)
         {
+            if (seatCount < 2 || seatCount > 4) throw new ArgumentOutOfRangeException(nameof(seatCount));
             this.opponentRandom = opponentRandom ?? throw new ArgumentNullException(nameof(opponentRandom));
             this.opponent = opponent ?? new HoldemNpcPolicy();
-            session = new HoldemSession(Guid.NewGuid(), config, new SeatId(1), new SeatId(2), deckRandom);
+            var seats = new SeatId[seatCount];
+            for (int i = 0; i < seatCount; i++) seats[i] = new SeatId(i + 1);
+            session = new HoldemSession(Guid.NewGuid(), config, seats, humanSeat, deckRandom, oddChipRule);
             HoldemReceipt start = session.StartNextHand(Guid.NewGuid(), Guid.NewGuid(), 0);
             if (!start.Accepted) throw new InvalidOperationException("Could not start the local Hold'em table.");
             Human = new HumanPort(this);
         }
         public IHoldemPlayerPort Human { get; }
 
-        public bool AdvanceOpponent()
+        public bool AdvanceOpponent() => AdvanceNpc();
+
+        public bool AdvanceNpc()
         {
-            HoldemSnapshot view = session.GetSnapshot(session.OpponentSeat);
+            SeatId? actor = Human.Read().CurrentSeat;
+            if (!actor.HasValue || actor.Value == humanSeat) return false;
+            HoldemSnapshot view = session.GetSnapshot(actor.Value);
             if (view.LegalActions == null) return false;
             BettingAction action = opponent.Choose(view, opponentRandom);
             var command = HoldemCommand.Act(view.SessionId, view.HandId, Guid.NewGuid(),
                 view.ViewerSeat, view.SessionVersion, action);
-            HoldemReceipt receipt = Apply(session.OpponentSeat, command);
+            HoldemReceipt receipt = Apply(actor.Value, command);
             if (!receipt.Accepted) throw new InvalidOperationException("The opponent returned an illegal action.");
             return true;
         }
@@ -71,9 +85,12 @@ namespace Poker.Application
         {
             private readonly HoldemLocalTable table;
             public HumanPort(HoldemLocalTable table) { this.table = table; }
-            public HoldemSnapshot Read() => table.session.GetSnapshot(table.session.HumanSeat);
+            public HoldemSnapshot Read() => table.session.GetSnapshot(table.humanSeat);
             public HoldemActionNotice LastAction => table.lastAction;
-            public HoldemReceipt Submit(HoldemCommand command) => table.Apply(table.session.HumanSeat, command);
+            public HoldemReceipt Submit(HoldemCommand command) => table.Apply(table.humanSeat, command);
+            // The local host exposes one explicit rule, never a player-supplied payout or winner.
+            public HoldemReceipt ResolvePendingSettlement(long expectedVersion) =>
+                table.session.ResolvePendingSettlement(Guid.NewGuid(), expectedVersion, HoldemOddChipRule.ClockwiseFromButton);
             public HoldemReceipt NextHand(long expectedVersion)
             {
                 HoldemReceipt receipt = table.session.StartNextHand(Guid.NewGuid(), Guid.NewGuid(), expectedVersion);

@@ -20,10 +20,10 @@ namespace Poker.Runtime
         private readonly long startingStack;
         private readonly List<Label> stages = new List<Label>();
         private HoldemSnapshot view;
-        private Label counter, ownTitle, otherTitle, ownStack, otherStack, ownStatus, otherStatus;
-        private Label ownHand, otherHand, pot, result, last, prompt, error, hint;
-        private VisualElement board, ownCards, otherCards, amountRow, actionRow, help, resetConfirmation;
-        private Button fold, passive, aggressive, next, reset, retry;
+        private readonly List<SeatWidgets> seatWidgets = new List<SeatWidgets>();
+        private Label counter, pot, result, last, prompt, error, hint;
+        private VisualElement board, amountRow, actionRow, help, resetConfirmation;
+        private Button fold, passive, aggressive, next, reset, retry, resolve;
         private TextField amount;
         private bool disposed, paused, helpOpen;
         private double lockedUntil;
@@ -59,27 +59,23 @@ namespace Poker.Runtime
             foreach (string name in new[] { "프리플랍", "플랍", "턴", "리버" })
             { var label = Text(name, "omc-stage"); stages.Add(label); steps.Add(label); }
             var table = Box("omc-table", root);
-            var other = Box("omc-opponent", table); other.AddToClassList("omc-seat");
-            var otherInfo = Box("omc-seat-info", other);
-            otherTitle = Text("", "omc-seat-title"); otherTitle.AddToClassList("omc-seat-name"); otherInfo.Add(otherTitle);
-            otherStack = Text("", "omc-stack"); otherInfo.Add(otherStack);
-            otherStatus = Text("", "omc-seat-status"); otherInfo.Add(otherStatus);
-            var otherHandArea = Box("omc-hand-area", other);
-            otherCards = Box("omc-cards", otherHandArea); otherCards.name = "omc-opponent-cards";
-            otherHand = Text("", "omc-hand-label"); otherHandArea.Add(otherHand);
+            var initial = port.Read();
+            root.EnableInClassList("multi-seat", initial.SeatCount > 2);
+            var opponents = Box("omc-opponents", table);
+            bool firstOpponent = true;
+            for (int i = 0; i < initial.SeatCount; i++)
+            {
+                var seat = initial.GetSeatAt(i);
+                if (seat.IsViewer) continue;
+                seatWidgets.Add(CreateSeat(opponents, seat.Seat, false, firstOpponent));
+                firstOpponent = false;
+            }
             var middle = Box("omc-middle", table);
             pot = Text("", "omc-pot"); middle.Add(pot);
             board = Box("omc-board", middle); board.AddToClassList("omc-cards"); board.name = "omc-board";
             result = Text("", "omc-result"); middle.Add(result);
             last = Text("", "omc-last"); middle.Add(last);
-            var own = Box("omc-player", table); own.AddToClassList("omc-seat");
-            var ownInfo = Box("omc-seat-info", own);
-            ownTitle = Text("", "omc-seat-title"); ownTitle.AddToClassList("omc-seat-name"); ownInfo.Add(ownTitle);
-            ownStack = Text("", "omc-stack"); ownInfo.Add(ownStack);
-            ownStatus = Text("", "omc-seat-status"); ownInfo.Add(ownStatus);
-            var ownHandArea = Box("omc-hand-area", own);
-            ownCards = Box("omc-cards", ownHandArea); ownCards.name = "omc-own-cards";
-            ownHand = Text("", "omc-hand-label"); ownHandArea.Add(ownHand);
+            seatWidgets.Add(CreateSeat(table, initial.ViewerSeat, true, false));
             var controls = Box("omc-controls", root);
             prompt = Text("", "omc-prompt"); controls.Add(prompt);
             amountRow = Box("omc-amounts", controls);
@@ -101,7 +97,12 @@ namespace Poker.Runtime
             next.AddToClassList("omc-primary");
             reset = Click("처음부터", "omc-reset", Restart); reset.AddToClassList("omc-quiet");
             retry = Click("진행 다시 확인", "omc-retry", Recover);
-            foreach (var button in new[] { fold, passive, aggressive, next, reset, retry }) actionRow.Add(button);
+            resolve = Click("이번 판에 임시 규칙 적용", "omc-resolve", () =>
+            {
+                if (CanInteract() && view.IsSettlementPending) Run(() => port.ResolvePendingSettlement(view.SessionVersion));
+            });
+            resolve.tooltip = "동률인 승자 중 버튼 다음 자리부터 남는 칩을 지급해요. 이번 판에만 적용하며 팀의 최종 규칙을 정하지 않아요.";
+            foreach (var button in new[] { fold, passive, aggressive, next, reset, retry, resolve }) actionRow.Add(button);
             error = Text("", "omc-error"); controls.Add(error);
             help = Box("omc-overlay", root);
             var helpCard = Box("omc-help-card", help);
@@ -130,36 +131,29 @@ namespace Poker.Runtime
             view = port.Read();
             bool changed = previous == null || previous.SessionVersion != view.SessionVersion || previous.SessionId != view.SessionId;
             bool complete = view.Result != null;
+            bool pending = view.IsSettlementPending;
             root.EnableInClassList("complete", complete);
-            counter.text = view.HandNumber.ToString(CultureInfo.InvariantCulture) + "번째 판";
+            root.EnableInClassList("pending", pending);
+            counter.text = view.SeatCount + "인 테이블 · " + view.HandNumber.ToString(CultureInfo.InvariantCulture) + "번째 판";
             int stageIndex = complete ? 4 : (int)view.Street;
             for (int i = 0; i < stages.Count; i++)
             {
                 stages[i].EnableInClassList("current", i == stageIndex);
                 stages[i].EnableInClassList("past", i < stageIndex && (i == 0 || view.BoardCount >= i + 2));
             }
-            ownTitle.text = "나" + (view.ButtonSeat == view.ViewerSeat ? "  ·  버튼 / SB" : "  ·  BB");
-            otherTitle.text = "상대" + (view.ButtonSeat == view.OpponentSeat ? "  ·  버튼 / SB" : "  ·  BB");
-            ownTitle.EnableInClassList("acting", view.CurrentSeat == view.ViewerSeat);
-            otherTitle.EnableInClassList("acting", view.CurrentSeat == view.OpponentSeat);
-            ownStack.text = KoreanPokerText.Chips(view.OwnStack); otherStack.text = KoreanPokerText.Chips(view.OpponentStack);
-            ownStatus.text = Status(true); otherStatus.text = Status(false);
+            foreach (var widgets in seatWidgets) RenderSeat(widgets, view.GetSeat(widgets.Seat));
             pot.text = (complete ? "정산 팟  " : "팟  ") + KoreanPokerText.Chips(view.PotAmount);
-            board.Clear(); ownCards.Clear(); otherCards.Clear();
+            pot.tooltip = PotDetails();
+            board.Clear();
+            var own = view.GetSeat(view.ViewerSeat);
             var ownBest = new HashSet<Card>();
-            if (view.Result != null)
-                for (int i = 0; i < view.Result.OwnBestCardCount; i++) ownBest.Add(view.Result.GetOwnBestCard(i));
+            for (int i = 0; i < own.RevealedBestCardCount; i++) ownBest.Add(own.GetRevealedBestCard(i));
             for (int i = 0; i < 5; i++)
                 board.Add(i < view.BoardCount ? Face(view.GetBoardCard(i), ownBest.Contains(view.GetBoardCard(i)))
                     : Empty(i == 1 ? "플랍" : i == 3 ? "턴" : i == 4 ? "리버" : ""));
-            for (int i = 0; i < view.OwnCardCount; i++) ownCards.Add(Face(view.GetOwnCard(i), ownBest.Contains(view.GetOwnCard(i))));
-            for (int i = 0; i < 2; i++) otherCards.Add(view.OpponentCardCount > i ? Face(view.GetOpponentCard(i), false) : Back());
-            ownHand.text = OwnHandLabel();
-            otherHand.text = view.Result?.OpponentHandValue == null ? "" : KoreanPokerText.HandName(view.Result.OpponentHandValue.Value);
-            Show(otherHand, otherHand.text.Length > 0);
-            result.text = ResultText();
-            Show(result, complete);
-            last.text = NoticeText();
+            result.text = pending ? "팟 분배 · 남는 칩 지급 대기" : ResultText();
+            Show(result, complete || pending);
+            last.text = pending ? "동률인 승자 중 버튼 다음 자리부터 남는 칩을 지급해요." : NoticeText();
             LegalBettingActions legal = view.LegalActions;
             bool active = legal != null && !paused && Time.realtimeSinceStartupAsDouble >= lockedUntil;
             bool canAggress = legal != null && (legal.CanBet || legal.CanRaise);
@@ -170,15 +164,19 @@ namespace Poker.Runtime
             if (legal != null) passive.text = legal.CanCheck ? "체크" : "콜  " + KoreanPokerText.Chips(legal.CallAmount);
             Show(aggressive, canAggress && !paused);
             if (changed && canAggress) amount.SetValueWithoutNotify(legal.MinimumAggressiveTarget.Value.ToString(CultureInfo.InvariantCulture));
-            Show(next, complete && view.OwnStack > 0 && view.OpponentStack > 0 && !paused);
+            Show(next, complete && view.CanContinue && !paused);
+            next.text = own.Status == HoldemSeatStatus.Busted ? "다음 판 관전" : "다음 판";
+            Show(resolve, pending && !paused); resolve.SetEnabled(!paused && Time.realtimeSinceStartupAsDouble >= lockedUntil);
             next.SetEnabled(!paused && Time.realtimeSinceStartupAsDouble >= lockedUntil);
             Show(reset, complete && !paused); reset.SetEnabled(!paused && Time.realtimeSinceStartupAsDouble >= lockedUntil);
-            reset.tooltip = "양쪽 칩을 " + KoreanPokerText.Chips(startingStack) + "으로 초기화합니다.";
+            reset.tooltip = "모든 참가자의 칩을 " + KoreanPokerText.Chips(startingStack) + "으로 초기화합니다.";
             Show(retry, paused);
-            prompt.text = complete ? (view.OwnStack == 0 ? "칩을 모두 잃었어요. 다시 도전할까요?"
-                : view.OpponentStack == 0 ? "상대의 칩을 모두 가져왔어요!"
-                : "다음 판에도 칩은 그대로 이어져요.")
-                : legal == null ? "상대가 생각 중이에요…" : "내 차례예요.";
+            prompt.text = pending ? "이번 판의 남는 칩 지급 방법을 선택해 주세요."
+                : complete ? (view.IsOver ? (view.OwnStack > 0 ? "모든 칩을 가져왔어요!" : "테이블 승부가 끝났어요.")
+                    : view.OwnStack == 0 ? "칩을 모두 잃었어요. 다음 판은 관전할 수 있어요." : "다음 판에도 칩은 그대로 이어져요.")
+                : own.Status == HoldemSeatStatus.Busted ? "관전 중 · " + ActorText()
+                : own.Status == HoldemSeatStatus.Folded ? "이번 판은 폴드했어요 · " + ActorText()
+                : legal == null ? ActorText() : "내 차례예요.";
             if (changed) error.text = "";
             UpdateAmount();
             if (paused) ApplyPaused();
@@ -225,7 +223,7 @@ namespace Poker.Runtime
         }
         private void Next()
         {
-            if (!CanInteract() || view.Result == null || view.OwnStack <= 0 || view.OpponentStack <= 0) return;
+            if (!CanInteract() || view.Result == null || !view.CanContinue) return;
             Run(() => port.NextHand(view.SessionVersion));
         }
         private void Restart()
@@ -255,7 +253,7 @@ namespace Poker.Runtime
         private void ApplyPaused()
         {
             Show(amountRow, false);
-            foreach (var button in new[] { fold, passive, aggressive, next, reset }) { button.SetEnabled(false); Show(button, false); }
+            foreach (var button in new[] { fold, passive, aggressive, next, reset, resolve }) { button.SetEnabled(false); Show(button, false); }
             if (abandonSession != null) { Show(reset, true); reset.SetEnabled(true); }
             Show(retry, true); prompt.text = "진행을 잠시 멈췄어요.";
             error.text = "현재 판은 유지돼요. 다시 확인해 주세요.";
@@ -266,37 +264,97 @@ namespace Poker.Runtime
             try { paused = false; Render(); }
             catch (Exception e) { PauseProgress(); Debug.LogError("Holdem display paused (" + e.GetType().Name + ")."); }
         }
-        private string Status(bool own)
+        private SeatWidgets CreateSeat(VisualElement parent, SeatId seat, bool own, bool firstOpponent)
         {
-            if (view.Result != null) return "팟에서 " + KoreanPokerText.Chips(own ? view.Result.OwnPayout : view.Result.OpponentPayout) + " 지급";
-            long stack = own ? view.OwnStack : view.OpponentStack;
-            long paid = own ? view.OwnStreetContribution : view.OpponentStreetContribution;
-            return stack == 0 ? "올인" : "이번 베팅 " + KoreanPokerText.Chips(paid);
+            var box = Box(own ? "omc-player" : "omc-opponent", parent); box.AddToClassList("omc-seat");
+            box.name = "omc-seat-" + seat.Value;
+            var info = Box("omc-seat-info", box);
+            var title = Text("", "omc-seat-title"); title.AddToClassList("omc-seat-name"); info.Add(title);
+            var stack = Text("", "omc-stack"); info.Add(stack);
+            var status = Text("", "omc-seat-status"); info.Add(status);
+            var handArea = Box("omc-hand-area", box);
+            var cards = Box("omc-cards", handArea);
+            cards.name = own ? "omc-own-cards" : firstOpponent ? "omc-opponent-cards" : "omc-opponent-cards-" + seat.Value;
+            var hand = Text("", "omc-hand-label"); handArea.Add(hand);
+            return new SeatWidgets { Seat = seat, Box = box, Title = title, Stack = stack, Status = status, Cards = cards, Hand = hand };
+        }
+        private void RenderSeat(SeatWidgets widgets, HoldemSeatView seat)
+        {
+            string badges = seat.IsButton ? "버튼" : "";
+            if (seat.IsSmallBlind) badges += badges.Length == 0 ? "SB" : " / SB";
+            if (seat.IsBigBlind) badges += badges.Length == 0 ? "BB" : " / BB";
+            widgets.Title.text = SeatName(seat.Seat) + (badges.Length > 0 ? "  ·  " + badges : "");
+            widgets.Title.EnableInClassList("acting", seat.IsCurrentActor);
+            widgets.Box.EnableInClassList("acting-seat", seat.IsCurrentActor);
+            widgets.Box.EnableInClassList("inactive-seat", seat.Status == HoldemSeatStatus.Folded || seat.Status == HoldemSeatStatus.Busted);
+            widgets.Stack.text = KoreanPokerText.Chips(seat.Stack);
+            widgets.Status.text = view.Result != null ? "팟에서 " + KoreanPokerText.Chips(seat.Awarded) + " 지급"
+                : seat.Status == HoldemSeatStatus.Busted ? "탈락"
+                : seat.Status == HoldemSeatStatus.Folded ? "폴드"
+                : seat.Status == HoldemSeatStatus.AllIn ? "올인"
+                : "이번 베팅 " + KoreanPokerText.Chips(seat.StreetContribution);
+            widgets.Cards.Clear();
+            var best = new HashSet<Card>();
+            if (seat.IsViewer)
+                for (int i = 0; i < seat.RevealedBestCardCount; i++) best.Add(seat.GetRevealedBestCard(i));
+            if (seat.WasDealtIn)
+                for (int i = 0; i < 2; i++) widgets.Cards.Add(seat.VisibleHoleCardCount > i
+                    ? Face(seat.GetVisibleHoleCard(i), best.Contains(seat.GetVisibleHoleCard(i))) : Back());
+            else widgets.Cards.Add(Text("관전 중", "omc-hand-label"));
+            widgets.Hand.text = seat.Status == HoldemSeatStatus.Folded ? "폴드" : seat.RevealedHandValue.HasValue
+                ? KoreanPokerText.HandName(seat.RevealedHandValue.Value) : seat.IsViewer ? OwnHandLabel() : "";
+            Show(widgets.Hand, widgets.Hand.text.Length > 0);
         }
         private string OwnHandLabel()
         {
+            if (view.OwnCardCount != 2) return "";
             if (view.BoardCount < 3) return "내 카드 2장";
             var cards = new Card[view.BoardCount];
             for (int i = 0; i < cards.Length; i++) cards[i] = view.GetBoardCard(i);
             return KoreanPokerText.HandName(HoldemBestHand.Evaluate(cards, new[] { view.GetOwnCard(0), view.GetOwnCard(1) }).Value);
         }
+        private string SeatName(SeatId seat) => seat == view.ViewerSeat ? "나" : view.SeatCount == 2 ? "상대" : "상대 " + view.GetSeat(seat).TableIndex;
+        private string ActorText() => view.CurrentSeat.HasValue ? SeatName(view.CurrentSeat.Value) + " 차례예요." : "진행을 확인하고 있어요.";
         private string ResultText()
         {
             var r = view.Result;
             if (r == null) return "";
-            string winner = r.WinnerSeat == null ? "무승부 · 팟 나눔" : r.WinnerSeat == view.ViewerSeat ? "나 승리" : "상대 승리";
+            string winner = r.WinnerSeat == null ? (r.PotCount > 1 ? "팟별 정산 완료" : "무승부 · 팟 나눔") : SeatName(r.WinnerSeat.Value) + " 승리";
             if (r.Kind != HoldemResultKind.Showdown) return winner + " · 폴드로 종료";
             if (r.WinnerSeat == null) return winner;
-            HandValue win = r.WinnerSeat == view.ViewerSeat ? r.OwnHandValue.Value : r.OpponentHandValue.Value;
-            return winner + " · " + KoreanPokerText.HandName(win);
+            var value = view.GetSeat(r.WinnerSeat.Value).RevealedHandValue;
+            return winner + (value.HasValue ? " · " + KoreanPokerText.HandName(value.Value) : "");
+        }
+        private string PotDetails()
+        {
+            if (view.Result == null) return "";
+            var lines = new List<string>();
+            for (int i = 0; i < view.Result.PotCount; i++)
+            {
+                var award = view.Result.GetPot(i);
+                var recipients = new List<string>();
+                for (int j = 0; j < award.PayoutCount; j++)
+                {
+                    var paid = award.GetPayout(j);
+                    recipients.Add(SeatName(paid.Seat) + " " + KoreanPokerText.Chips(paid.Amount));
+                }
+                lines.Add((i == 0 ? "메인 팟" : "사이드 팟 " + i) + " · " + string.Join(", ", recipients));
+            }
+            return string.Join("\n", lines);
+        }
+        private sealed class SeatWidgets
+        {
+            public SeatId Seat;
+            public VisualElement Box, Cards;
+            public Label Title, Stack, Status, Hand;
         }
         private string NoticeText()
         {
             if (view.Result != null)
-                return view.Result.Kind == HoldemResultKind.Showdown ? "쇼다운 · 내 최종 조합 5장을 금색으로 표시했어요." : "쇼다운 없이 끝난 판은 상대 패를 공개하지 않아요.";
+                return view.Result.Kind == HoldemResultKind.Showdown ? (view.GetSeat(view.ViewerSeat).RevealedBestCardCount > 0 ? "쇼다운 · 내 최종 조합 5장을 금색으로 표시했어요." : "쇼다운 · 끝까지 남은 참가자의 패를 공개해요.") + (view.Result.PotCount > 1 ? " 팟 금액에 마우스를 올리면 분배를 볼 수 있어요." : "") : "쇼다운 없이 끝난 판은 상대 패를 공개하지 않아요.";
             var notice = port.LastAction;
             if (notice == null) return "공용 카드가 차례로 열려요.";
-            return (notice.Seat == view.ViewerSeat ? "나" : "상대") + " · " + KoreanPokerText.ActionName(notice.Kind)
+            return SeatName(notice.Seat) + " · " + KoreanPokerText.ActionName(notice.Kind)
                 + (notice.Paid > 0 ? " · " + KoreanPokerText.Chips(notice.Paid) + " 추가" : "");
         }
         private static VisualElement Face(Card card, bool best)

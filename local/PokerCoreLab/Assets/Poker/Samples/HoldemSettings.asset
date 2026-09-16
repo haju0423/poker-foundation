@@ -15,4 +15,5 @@ MonoBehaviour:
   startingStack: 100
   smallBlind: 1
   bigBlind: 2
+  seatCount: 4
   opponentDelaySeconds: 0.7

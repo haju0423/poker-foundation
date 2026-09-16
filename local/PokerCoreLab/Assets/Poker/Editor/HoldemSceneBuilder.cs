@@ -52,6 +52,14 @@ namespace Poker.Editor
         }
         public static void Build() => BuildPlayer(BuildTarget.StandaloneOSX, BuildOptions.None);
         public static void BuildWindows() => BuildPlayer(BuildTarget.StandaloneWindows64, BuildOptions.None);
+        public static void ConfigureFourSeatSample()
+        {
+            Create();
+            var settings = AssetDatabase.LoadAssetAtPath<HoldemTableSettings>("Assets/Poker/Samples/HoldemSettings.asset");
+            settings.seatCount = 4;
+            EditorUtility.SetDirty(settings); AssetDatabase.SaveAssets();
+            Validate();
+        }
         public static void BindMissingPanelReference()
         {
             var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);

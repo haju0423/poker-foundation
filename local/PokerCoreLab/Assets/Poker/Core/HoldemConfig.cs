@@ -2,7 +2,7 @@ using System;
 
 namespace Poker.Foundation
 {
-    /// <summary>Heads-up no-limit session settings. Antes and more than two seats are outside this ruleset.</summary>
+    /// <summary>Two-to-four-seat no-limit session settings. Antes remain outside this ruleset.</summary>
     public sealed class HoldemConfig
     {
         public HoldemConfig(long startingStack, long smallBlind, long bigBlind)
@@ -33,5 +33,31 @@ namespace Poker.Foundation
     {
         Fold = 1,
         Showdown = 2
+    }
+
+    public enum HoldemButtonPolicy
+    {
+        PokerStarsForwardMoving = 1
+    }
+
+    public enum HoldemOddChipRule
+    {
+        RequireExplicitPriority = 0,
+        ClockwiseFromButton = 1
+    }
+
+    public enum HoldemSettlementState
+    {
+        None = 0,
+        AwaitingOddChipPriority = 1,
+        Settled = 2
+    }
+
+    public enum HoldemSeatStatus
+    {
+        Busted = 0,
+        Active = 1,
+        Folded = 2,
+        AllIn = 3
     }
 }

@@ -177,7 +177,139 @@ namespace Poker.Runtime.Tests
             yield return WaitEnabled("omc-next"); Capture("winning-showdown");
         }
 
+
+        [UnityTest]
+        public IEnumerator FourSeatsFitSmallWindowAndRevealOnlyAtShowdown()
+        {
+            screen.Dispose();
+            table = new HoldemLocalTable(new HoldemConfig(100, 1, 2), 4, new FixedRandom(), new FixedRandom(),
+                new PassivePolicy(), HoldemOddChipRule.ClockwiseFromButton);
+            screen = new HoldemTableScreen(Root, table.Human, () => restarts++, 100, Resources.Load<Font>("Fonts/NanumGothic-Regular"));
+            for (int i = 0; i < 5; i++) yield return null;
+            Assert.That(Root.Query(className: "omc-opponent").ToList().Count, Is.EqualTo(3));
+            Assert.That(Root.Query(className: "hidden").ToList().Count, Is.EqualTo(6));
+            Assert.That(Root.Query(className: "face-card").ToList().Count, Is.EqualTo(2));
+            Assert.That(table.AdvanceNpc(), Is.True); screen.Render();
+            for (int i = 0; i < 3; i++) yield return null;
+            AssertButtonHit("omc-passive"); AssertLayout(); Capture("four-seat-initial");
+            yield return Resize(new Vector2Int(960, 640));
+            AssertLayout(); AssertButtonHit("omc-passive"); Capture("four-seat-960x640");
+            var opponents = Root.Query(className: "omc-opponent").ToList();
+            for (int i = 0; i < opponents.Count - 1; i++)
+                Assert.That(opponents[i].worldBound.xMax, Is.LessThanOrEqualTo(opponents[i + 1].worldBound.xMin + 1));
+            yield return CompletePassive();
+            Assert.That(Root.Query(className: "face-card").ToList().Count, Is.EqualTo(13));
+            Assert.That(Root.Query(className: "best").ToList().Count, Is.EqualTo(5));
+            AssertLayout(); Capture("four-seat-showdown");
+            yield return WaitEnabled("omc-next");
+            Submit("omc-next"); yield return null;
+            Assert.That(table.Human.Read().HandNumber, Is.EqualTo(2));
+            Assert.That(Root.Query(className: "hidden").ToList().Count, Is.EqualTo(6));
+        }
+
+
+        [UnityTest]
+        public IEnumerator PendingOddChipRequiresAnExplicitChoiceThenShowsBothPotAwards()
+        {
+            screen.Dispose();
+            var seats = Enumerable.Range(1, 4).Select(i => new SeatId(i)).ToArray();
+            var ledger = ChipLedger.Create(seats.Select((seat, i) => new SeatChips(seat, i == 0 ? 5 : 10)).ToArray());
+            var session = new HoldemSession(Guid.NewGuid(), new HoldemConfig(100, 1, 2), ledger, seats, seats[0],
+                new PrefixRandom("Js Jd 2c 3h Qc Qh 2d 3s Ac 3c 3d 8h Ad 9s Ah Td"));
+            Assert.That(session.StartNextHand(Guid.NewGuid(), Guid.NewGuid(), 0).Accepted, Is.True);
+            foreach (var action in new[] { BettingAction.RaiseTo(10), BettingAction.Call(), BettingAction.Call(), BettingAction.Call() })
+            {
+                var v = session.GetSnapshot(seats[0]);
+                Assert.That(session.Submit(v.CurrentSeat.Value, HoldemCommand.Act(v.SessionId, v.HandId, Guid.NewGuid(),
+                    v.CurrentSeat.Value, v.SessionVersion, action)).Accepted, Is.True);
+            }
+            var port = new SessionPort(session, seats[0]);
+            screen = new HoldemTableScreen(Root, port, () => restarts++, 100, Resources.Load<Font>("Fonts/NanumGothic-Regular"));
+            for (int i = 0; i < 5; i++) yield return null;
+            Assert.That(port.Read().IsSettlementPending, Is.True);
+            Assert.That(Root.Q<Button>("omc-next").resolvedStyle.display, Is.EqualTo(DisplayStyle.None));
+            AssertButtonHit("omc-resolve"); AssertLayout(); Capture("four-seat-odd-chip-pending");
+            long version = port.Read().SessionVersion;
+            Submit("omc-resolve"); Submit("omc-resolve");
+            Assert.That(port.Read().SessionVersion, Is.EqualTo(version + 1));
+            Assert.That(port.Read().IsSettlementPending, Is.False);
+            Assert.That(port.Read().Result.PotCount, Is.EqualTo(2));
+            Assert.That(port.Read().GetSeatAt(0).Stack, Is.EqualTo(20));
+            Assert.That(port.Read().GetSeatAt(1).Stack, Is.EqualTo(8));
+            Assert.That(port.Read().GetSeatAt(2).Stack, Is.EqualTo(7));
+            Assert.That(Root.Q<Label>(className: "omc-result").text, Is.EqualTo("팟별 정산 완료"));
+            Assert.That(Root.Q<Label>(className: "omc-pot").tooltip, Does.Contain("사이드 팟 1"));
+            yield return null; AssertLayout(); Capture("four-seat-side-pots");
+        }
+
 #if UNITY_EDITOR
+
+        [UnityTest]
+        public IEnumerator SavedFourSeatSceneReceivesPickedPointerDownAndUpThroughItsNestedSurface()
+        {
+            screen.Dispose(); go.SetActive(false);
+            var saved = UnityEditor.SceneManagement.EditorSceneManager.LoadSceneInPlayMode(
+                "Assets/Poker/Samples/HoldemTable.unity",
+                new UnityEngine.SceneManagement.LoadSceneParameters(UnityEngine.SceneManagement.LoadSceneMode.Additive));
+            try
+            {
+                for (int i = 0; i < 5; i++) yield return null;
+                var doc = saved.GetRootGameObjects().SelectMany(g => g.GetComponentsInChildren<UIDocument>()).Single();
+                var bootstrap = doc.GetComponent<HoldemTableBootstrap>();
+                var docRoot = doc.rootVisualElement;
+                var surface = docRoot.Q(className: "omc-root");
+                Assert.That(doc.panelSettings.targetTexture, Is.Null, "Keep the production screen-space panel in this pointer test.");
+                Assert.That(bootstrap.Progress.SeatCount, Is.EqualTo(4));
+                Assert.That(surface.parent, Is.SameAs(docRoot));
+                Assert.That(surface.panel, Is.Not.Null);
+                Assert.That(surface.worldBound.width, Is.GreaterThan(0));
+                Assert.That(surface.worldBound.height, Is.GreaterThan(0));
+                Assert.That(surface.worldBound.xMin, Is.GreaterThanOrEqualTo(docRoot.worldBound.xMin - 1));
+                Assert.That(surface.worldBound.xMax, Is.LessThanOrEqualTo(docRoot.worldBound.xMax + 1));
+                var helpButton = docRoot.Q<Button>("omc-help");
+                int downCount = 0, upCount = 0, clicks = 0;
+                helpButton.RegisterCallback<PointerDownEvent>(_ => downCount++, TrickleDown.TrickleDown);
+                helpButton.RegisterCallback<PointerUpEvent>(_ => upCount++, TrickleDown.TrickleDown);
+                helpButton.RegisterCallback<ClickEvent>(_ => clicks++, TrickleDown.TrickleDown);
+                long before = bootstrap.Progress.Version;
+                PointerClick(docRoot, helpButton);
+                yield return null;
+                Assert.That(downCount, Is.EqualTo(1)); Assert.That(upCount, Is.EqualTo(1)); Assert.That(clicks, Is.EqualTo(1));
+                Assert.That(docRoot.Q<Button>("omc-close-help").worldBound.height, Is.GreaterThan(0));
+                Assert.That(bootstrap.Progress.Version, Is.EqualTo(before));
+                PointerClick(docRoot, docRoot.Q<Button>("omc-close-help"));
+                double deadline = Time.realtimeSinceStartupAsDouble + 10;
+                while (!bootstrap.Progress.OwnTurn && Time.realtimeSinceStartupAsDouble < deadline) yield return null;
+                Assert.That(bootstrap.Progress.OwnTurn, Is.True);
+                // Render changes display in Update; wait for UI Toolkit's layout pass before picking.
+                for (int i = 0; i < 3; i++) yield return null;
+                var passiveButton = docRoot.Q<Button>("omc-passive");
+                before = bootstrap.Progress.Version;
+                PointerClick(docRoot, passiveButton);
+                Assert.That(bootstrap.Progress.Version, Is.EqualTo(before + 1), "Picked pointer input must invoke exactly one game command.");
+            }
+            finally
+            {
+                foreach (var root in saved.GetRootGameObjects()) root.SetActive(false);
+            }
+            yield return UnityEngine.SceneManagement.SceneManager.UnloadSceneAsync(saved);
+        }
+
+        private static void PointerClick(VisualElement docRoot, Button button)
+        {
+            Assert.That(button.enabledInHierarchy, Is.True);
+            Assert.That(button.pickingMode, Is.EqualTo(PickingMode.Position));
+            Vector2 point = button.worldBound.center;
+            var picked = docRoot.panel.Pick(point);
+            Assert.That(IsDescendant(picked, button), Is.True, button.name + " is occluded on the saved scene. Button="
+                + button.worldBound + ", root=" + docRoot.worldBound + ", picked=" + picked?.name);
+            using (var down = PointerDownEvent.GetPooled(new Event { type = EventType.MouseDown, button = 0, mousePosition = point, clickCount = 1 }))
+            { down.target = picked; picked.SendEvent(down); }
+            using (var up = PointerUpEvent.GetPooled(new Event { type = EventType.MouseUp, button = 0, mousePosition = point, clickCount = 1 }))
+            { up.target = picked; picked.SendEvent(up); }
+        }
+
+
         [UnityTest]
         public IEnumerator SavedHoldemSceneRunsProductionOpponentCompletesAndExplicitlyRestarts()
         {
@@ -293,5 +425,32 @@ namespace Poker.Runtime.Tests
         { private readonly System.Random random; public SeededRandom(int seed) { random = new System.Random(seed); } public int NextInt(int upper) => random.Next(upper); }
         private sealed class PassivePolicy : IHoldemOpponentPolicy
         { public BettingAction Choose(HoldemSnapshot view, IRandomSource random) => view.LegalActions.CanCheck ? BettingAction.Check() : BettingAction.Call(); }
+        private sealed class SessionPort : IHoldemPlayerPort
+        {
+            private readonly HoldemSession session; private readonly SeatId viewer;
+            public SessionPort(HoldemSession session, SeatId viewer) { this.session = session; this.viewer = viewer; }
+            public HoldemSnapshot Read() => session.GetSnapshot(viewer);
+            public HoldemActionNotice LastAction => null;
+            public HoldemReceipt Submit(HoldemCommand command) => session.Submit(viewer, command);
+            public HoldemReceipt NextHand(long version) => session.StartNextHand(Guid.NewGuid(), Guid.NewGuid(), version);
+            public HoldemReceipt ResolvePendingSettlement(long version) => session.ResolvePendingSettlement(Guid.NewGuid(), version, HoldemOddChipRule.ClockwiseFromButton);
+        }
+        private sealed class PrefixRandom : IRandomSource
+        {
+            private readonly System.Collections.Generic.Queue<int> choices = new System.Collections.Generic.Queue<int>();
+            public PrefixRandom(string codes)
+            {
+                var target = codes.Split(' ').Select(s => new Card((Rank)("23456789TJQKA".IndexOf(s[0]) + 2),
+                    (Suit)("cdhs".IndexOf(s[1]) + 1))).ToList();
+                target.AddRange(Enumerable.Range(0, Card.DeckSize).Select(Card.FromId).Where(c => !target.Contains(c)));
+                var working = Enumerable.Range(0, Card.DeckSize).Select(Card.FromId).ToArray();
+                for (int i = working.Length - 1; i > 0; i--)
+                {
+                    int pick = Array.IndexOf(working, target[i], 0, i + 1); choices.Enqueue(pick);
+                    Card card = working[i]; working[i] = working[pick]; working[pick] = card;
+                }
+            }
+            public int NextInt(int upper) => choices.Count > 0 ? choices.Dequeue() : upper - 1;
+        }
     }
 }

@@ -22,7 +22,7 @@ namespace Poker.Runtime
             {
                 if (table == null) return default;
                 var view = table.Human.Read();
-                return new HoldemProgressInfo(view.Street, view.LegalActions != null, view.SessionVersion, view.HandNumber);
+                return new HoldemProgressInfo(view.Street, view.LegalActions != null, view.SessionVersion, view.HandNumber, view.SeatCount);
             }
         }
         private void OnEnable()
@@ -47,7 +47,7 @@ namespace Poker.Runtime
             var surface = new VisualElement();
             try
             {
-                candidate = new HoldemLocalTable(config, nextDeck, nextOpponent);
+                candidate = new HoldemLocalTable(config, settings.seatCount, nextDeck, nextOpponent);
                 // Construct and render off-tree first. A failed replacement must leave the old table visible.
                 candidateScreen = new HoldemTableScreen(surface, candidate.Human, StartNewSession, config.StartingStack, font,
                     () => StartNewSession(true));
@@ -67,8 +67,8 @@ namespace Poker.Runtime
             {
                 var view = table.Human.Read();
                 if (view.SessionVersion != observedVersion) Schedule();
-                if (view.CurrentSeat != view.OpponentSeat || Time.realtimeSinceStartupAsDouble < nextOpponentAt) return;
-                if (table.AdvanceOpponent()) screen.Render();
+                if (!view.CurrentSeat.HasValue || view.CurrentSeat == view.ViewerSeat || Time.realtimeSinceStartupAsDouble < nextOpponentAt) return;
+                if (table.AdvanceNpc()) screen.Render();
                 Schedule();
             }
             catch (Exception e)
@@ -93,11 +93,12 @@ namespace Poker.Runtime
     /// <summary>Non-sensitive progress for scene tests; carries no private cards or authority access.</summary>
     public readonly struct HoldemProgressInfo
     {
-        public HoldemProgressInfo(HoldemStreet street, bool ownTurn, long version, long handNumber)
-        { Street = street; OwnTurn = ownTurn; Version = version; HandNumber = handNumber; }
+        public HoldemProgressInfo(HoldemStreet street, bool ownTurn, long version, long handNumber, int seatCount = 2)
+        { Street = street; OwnTurn = ownTurn; Version = version; HandNumber = handNumber; SeatCount = seatCount; }
         public HoldemStreet Street { get; }
         public bool OwnTurn { get; }
         public long Version { get; }
         public long HandNumber { get; }
+        public int SeatCount { get; }
     }
 }

@@ -3,6 +3,21 @@ using System.Collections.Generic;
 
 namespace Poker.Foundation
 {
+    /// <summary>A seat and its already-validated poker value; contains no physical-card ownership claim.</summary>
+    public sealed class SeatHandValue
+    {
+        public SeatHandValue(SeatId owner, HandValue value)
+        {
+            if (!owner.IsValid) throw new ArgumentException("A valid owner is required.", nameof(owner));
+            if (!value.IsValid) throw new ArgumentException("A valid hand value is required.", nameof(value));
+            Owner = owner;
+            Value = value;
+        }
+
+        public SeatId Owner { get; }
+        public HandValue Value { get; }
+    }
+
     /// <summary>Immutable payout candidate from matched hand contributions. No authentication, phase or command history.</summary>
     public sealed class PotSettlement
     {
@@ -37,22 +52,51 @@ namespace Poker.Foundation
         {
             if (ledger == null) throw new ArgumentNullException(nameof(ledger));
             if (liveHands == null) throw new ArgumentNullException(nameof(liveHands));
-            long highest = RequireMatchedPot(ledger);
+            // Preserve the original Draw API's validation precedence before card inspection.
+            RequireMatchedPot(ledger);
             int count = liveHands.Count;
             if (count < 2 || count > ledger.SeatCount) throw new ArgumentException("At least two live hands are required.", nameof(liveHands));
-            var values = new Dictionary<SeatId, HandValue>();
+            var ranked = new SeatHandValue[count];
+            var owners = new HashSet<SeatId>();
             var cards = new HashSet<Card>();
-            var caps = new SortedSet<long>();
             for (int i = 0; i < count; i++)
             {
                 ShowdownHand hand = liveHands[i];
-                if (hand == null || values.ContainsKey(hand.Owner))
+                if (hand == null || !owners.Add(hand.Owner))
                     throw new ArgumentException("Live hands must be non-null and have unique owners.", nameof(liveHands));
                 long paid = ledger.GetChips(hand.Owner).Committed;
                 if (paid == 0) throw new ArgumentException("A live hand must have contributed to this pot.", nameof(liveHands));
                 for (int j = 0; j < SeatHand.CardCount; j++)
                     if (!cards.Add(hand.GetCard(j))) throw new ArgumentException("Live hands share a physical card.", nameof(liveHands));
-                values.Add(hand.Owner, hand.Value);
+                ranked[i] = new SeatHandValue(hand.Owner, hand.Value);
+            }
+            return ShowdownByValue(ledger, ranked, oddChipPriority);
+        }
+
+        /// <summary>
+        /// Settles matched contribution layers from caller-validated values. Unlike Showdown,
+        /// this overload makes no physical-card uniqueness claim, so community-card games can
+        /// share a board while reusing the same side-pot and odd-chip engine.
+        /// </summary>
+        public static PotSettlement ShowdownByValue(ChipLedger ledger,
+            IReadOnlyList<SeatHandValue> liveValues, IReadOnlyList<SeatId> oddChipPriority = null)
+        {
+            if (ledger == null) throw new ArgumentNullException(nameof(ledger));
+            if (liveValues == null) throw new ArgumentNullException(nameof(liveValues));
+            long highest = RequireMatchedPot(ledger);
+            int count = liveValues.Count;
+            if (count < 2 || count > ledger.SeatCount)
+                throw new ArgumentException("At least two live values are required.", nameof(liveValues));
+            var values = new Dictionary<SeatId, HandValue>();
+            var caps = new SortedSet<long>();
+            for (int i = 0; i < count; i++)
+            {
+                SeatHandValue ranked = liveValues[i];
+                if (ranked == null || values.ContainsKey(ranked.Owner))
+                    throw new ArgumentException("Live values must be non-null and have unique owners.", nameof(liveValues));
+                long paid = ledger.GetChips(ranked.Owner).Committed;
+                if (paid == 0) throw new ArgumentException("A live value must have contributed to this pot.", nameof(liveValues));
+                values.Add(ranked.Owner, ranked.Value);
                 caps.Add(paid);
             }
             SeatId[] priority = CopyPriority(oddChipPriority, values);
