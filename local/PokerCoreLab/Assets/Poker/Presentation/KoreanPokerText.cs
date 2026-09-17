@@ -10,40 +10,6 @@ namespace Poker.Presentation
     /// </summary>
     public static class KoreanPokerText
     {
-        public static string PhaseName(HandPhase phase)
-        {
-            switch (phase)
-            {
-                case HandPhase.FirstBetting: return "첫 베팅";
-                case HandPhase.Exchange: return "카드 교환";
-                case HandPhase.SecondBetting: return "두 번째 베팅";
-                case HandPhase.AwaitingSettlementRule: return "정산 대기";
-                case HandPhase.Complete: return "이번 판 종료";
-                default: throw new ArgumentOutOfRangeException(nameof(phase));
-            }
-        }
-
-        public static string CommandErrorMessage(HandError error)
-        {
-            switch (error)
-            {
-                case HandError.UnauthorizedSeat: return "이 좌석으로 플레이할 권한이 없습니다.";
-                case HandError.WrongHand: return "다른 판의 요청입니다. 현재 판을 확인해 주세요.";
-                case HandError.CommandConflict: return "이미 처리한 요청과 내용이 다릅니다. 현재 상태를 확인해 주세요.";
-                case HandError.VersionMismatch: return "진행 상황이 바뀌었습니다. 현재 상태를 확인해 주세요.";
-                case HandError.NotStarted: return "아직 판이 시작되지 않았습니다.";
-                case HandError.AlreadyStarted: return "이미 시작한 판입니다.";
-                case HandError.Complete: return "이번 판은 끝났습니다.";
-                case HandError.SettlementRuleRequired: return "남는 칩의 지급 기준을 정해야 정산을 마칠 수 있습니다.";
-                case HandError.WrongPhase: return "지금은 이 행동을 할 수 없습니다.";
-                case HandError.WrongTurn: return "아직 내 차례가 아닙니다.";
-                case HandError.IllegalBet: return "지금 가능한 베팅과 금액을 확인해 주세요.";
-                case HandError.CardNotOwned: return "현재 내 패에 있는 카드만 바꿀 수 있습니다.";
-                case HandError.Busy: return "처리 중입니다. 잠시 후 다시 시도해 주세요.";
-                default: throw new ArgumentOutOfRangeException(nameof(error));
-            }
-        }
-
         public static string ActionName(BettingActionKind kind)
         {
             switch (kind)
@@ -59,9 +25,7 @@ namespace Poker.Presentation
 
         public static string FoldHelp => "이번 판의 승부를 포기합니다. 이미 팟에 확정된 칩은 돌려받지 않습니다.";
         public static string CheckHelp => "추가로 칩을 내지 않고 차례를 넘깁니다.";
-        public static string AllInHelp => "남은 칩을 모두 냅니다. 폴드하지 않았다면 카드 교환은 할 수 있습니다.";
-        public static string ExchangeHelp => "바꿀 카드를 고른 뒤 확정하세요. 한 장도 고르지 않으면 현재 패를 유지합니다.";
-        public static string KeepHandHelp => "카드를 바꾸지 않고 교환 차례를 마칩니다.";
+        public static string AllInHelp => "남은 칩을 모두 냅니다. 낸 칩에 해당하는 팟의 승부에는 계속 참여합니다.";
 
         public static string Chips(long amount)
         {
@@ -84,13 +48,6 @@ namespace Poker.Presentation
             return "레이즈 · 총 " + Chips(totalTarget) + (allIn ? " (올인)" : "");
         }
         public static string AdditionalChips(long amount) => Chips(amount) + " 추가";
-        public static string ExchangeLabel(int selectedCount)
-        {
-            if (selectedCount < 0 || selectedCount > SeatHand.CardCount)
-                throw new ArgumentOutOfRangeException(nameof(selectedCount));
-            return selectedCount == 0 ? "그대로 유지하고 확정" :
-                "선택한 " + selectedCount.ToString(CultureInfo.InvariantCulture) + "장 교환";
-        }
         public static string PotName(int index)
         {
             if (index < 0) throw new ArgumentOutOfRangeException(nameof(index));
@@ -149,16 +106,20 @@ namespace Poker.Presentation
                 case Suit.Spades: suit = "스페이드"; break;
                 default: throw new ArgumentOutOfRangeException(nameof(card));
             }
-            string rank;
+            return suit + " " + RankLabel(card);
+        }
+
+        public static string RankLabel(Card card)
+        {
+            if (!card.IsValid) throw new ArgumentException("A valid card is required.", nameof(card));
             switch (card.Rank)
             {
-                case Rank.Ace: rank = "A"; break;
-                case Rank.King: rank = "K"; break;
-                case Rank.Queen: rank = "Q"; break;
-                case Rank.Jack: rank = "J"; break;
-                default: rank = ((int)card.Rank).ToString(CultureInfo.InvariantCulture); break;
+                case Rank.Ace: return "A";
+                case Rank.King: return "K";
+                case Rank.Queen: return "Q";
+                case Rank.Jack: return "J";
+                default: return ((int)card.Rank).ToString(CultureInfo.InvariantCulture);
             }
-            return suit + " " + rank;
         }
 
         private static void RequirePositive(long amount)

@@ -15,7 +15,7 @@ namespace Poker.Foundation.Tests
         public void StrongestHandWinsMatchedPotWithoutChangingSource()
         {
             ChipLedger ledger = Paid(20, 20);
-            PotSettlement result = PotSettlement.Showdown(ledger, new[] { Strong(A), Medium(B) });
+            PotSettlement result = PotSettlement.ShowdownByValue(ledger, new[] { Strong(A), Medium(B) });
             Assert.That(result.PotCount, Is.EqualTo(1));
             Assert.That(result.GetAwardedTo(A), Is.EqualTo(40));
             Assert.That(result.GetAwardedTo(B), Is.Zero);
@@ -25,30 +25,25 @@ namespace Poker.Foundation.Tests
         }
 
         [Test]
-        public void ValueOnlyShowdownReusesTheSameMultiPotAndOddChipEngine()
+        public void SharedBoardCanGiveBothSeatsTheSameBestFive()
         {
-            ChipLedger ledger = Paid(5, 10, 10, 7);
-            ShowdownHand a = Strong(A), b = Medium(B), c = Weak(C);
-            PotSettlement physical = PotSettlement.Showdown(ledger,
-                new[] { a, b, c }, new[] { B, C, A });
-            PotSettlement values = PotSettlement.ShowdownByValue(ledger,
-                new[] { new SeatHandValue(A, a.Value), new SeatHandValue(B, b.Value),
-                    new SeatHandValue(C, c.Value) }, new[] { B, C, A });
-            Assert.That(values.PotCount, Is.EqualTo(physical.PotCount));
-            foreach (SeatId seat in new[] { A, B, C, D })
-                Assert.That(values.GetAwardedTo(seat), Is.EqualTo(physical.GetAwardedTo(seat)));
-            for (int i = 0; i < values.PotCount; i++)
-            {
-                Assert.That(values.GetPot(i).Amount, Is.EqualTo(physical.GetPot(i).Amount));
-                Assert.That(values.GetPot(i).ContributionCap, Is.EqualTo(physical.GetPot(i).ContributionCap));
-            }
-            Assert.That(ledger.TotalCommitted, Is.EqualTo(32));
+            Card[] board = Run(Suit.Spades, 14);
+            var a = new[] { new Card(Rank.Two, Suit.Hearts), new Card(Rank.Three, Suit.Hearts) };
+            var b = new[] { new Card(Rank.Four, Suit.Clubs), new Card(Rank.Five, Suit.Clubs) };
+            var values = new[] {
+                new SeatHandValue(A, HoldemBestHand.Evaluate(board, a).Value),
+                new SeatHandValue(B, HoldemBestHand.Evaluate(board, b).Value)
+            };
+            PotSettlement result = PotSettlement.ShowdownByValue(Paid(5, 5, 1), values, new[] { B, A });
+            Assert.That(result.GetAwardedTo(A), Is.EqualTo(5));
+            Assert.That(result.GetAwardedTo(B), Is.EqualTo(6));
+            AssertSettled(result, 11);
         }
 
         [Test]
         public void EachSidePotHasOnlyItsOwnEligibleWinnersAndFoldedMoneyStays()
         {
-            PotSettlement result = PotSettlement.Showdown(Paid(30, 70, 100, 100),
+            PotSettlement result = PotSettlement.ShowdownByValue(Paid(30, 70, 100, 100),
                 new[] { Strong(A), Medium(B), Weak(C) });
             Assert.That(result.PotCount, Is.EqualTo(3));
             Assert.That(result.GetPot(0).Amount, Is.EqualTo(120));
@@ -66,7 +61,7 @@ namespace Poker.Foundation.Tests
         [Test]
         public void FoldedIntermediateAmountsDoNotCreateArtificialPotsOrRoundTwice()
         {
-            PotSettlement result = PotSettlement.Showdown(Paid(5, 5, 1, 2, 3),
+            PotSettlement result = PotSettlement.ShowdownByValue(Paid(5, 5, 1, 2, 3),
                 new[] { Strong(A), Strong(B, Suit.Hearts) });
             Assert.That(result.PotCount, Is.EqualTo(1));
             Assert.That(result.GetAwardedTo(A), Is.EqualTo(8));
@@ -77,7 +72,7 @@ namespace Poker.Foundation.Tests
         [Test]
         public void FoldedPartialContributionIsIncludedInTheCorrectLayer()
         {
-            PotSettlement result = PotSettlement.Showdown(Paid(5, 10, 10, 7),
+            PotSettlement result = PotSettlement.ShowdownByValue(Paid(5, 10, 10, 7),
                 new[] { Strong(A), Medium(B), Weak(C) });
             Assert.That(result.PotCount, Is.EqualTo(2));
             Assert.That(result.GetPot(0).Amount, Is.EqualTo(20));
@@ -89,7 +84,7 @@ namespace Poker.Foundation.Tests
         [Test]
         public void ExactTieNeedsNoOddChipPolicyAndIgnoresSuitStrength()
         {
-            PotSettlement result = PotSettlement.Showdown(Paid(10, 10),
+            PotSettlement result = PotSettlement.ShowdownByValue(Paid(10, 10),
                 new[] { Strong(A), Strong(B, Suit.Hearts) });
             Assert.That(result.GetAwardedTo(A), Is.EqualTo(10));
             Assert.That(result.GetAwardedTo(B), Is.EqualTo(10));
@@ -101,7 +96,7 @@ namespace Poker.Foundation.Tests
         {
             ChipLedger ledger = Paid(5, 5, 1);
             PotSettlement result = null;
-            AssertFailure(SettlementFailure.MissingOddChipOrder, () => result = PotSettlement.Showdown(ledger,
+            AssertFailure(SettlementFailure.MissingOddChipOrder, () => result = PotSettlement.ShowdownByValue(ledger,
                 new[] { Strong(A), Strong(B, Suit.Hearts) }));
             Assert.That(result, Is.Null);
             Assert.That(ledger.TotalCommitted, Is.EqualTo(11));
@@ -111,21 +106,21 @@ namespace Poker.Foundation.Tests
         public void ExplicitPriorityNotNumericSeatOrHandOrderReceivesOddChip()
         {
             var hands = new[] { Strong(A), Strong(B, Suit.Hearts) };
-            PotSettlement first = PotSettlement.Showdown(Paid(5, 5, 1), hands, new[] { B, A });
-            PotSettlement second = PotSettlement.Showdown(Paid(5, 5, 1), hands, new[] { A, B });
+            PotSettlement first = PotSettlement.ShowdownByValue(Paid(5, 5, 1), hands, new[] { B, A });
+            PotSettlement second = PotSettlement.ShowdownByValue(Paid(5, 5, 1), hands, new[] { A, B });
             Assert.That(first.GetAwardedTo(B), Is.EqualTo(6));
             Assert.That(first.GetAwardedTo(A), Is.EqualTo(5));
             Assert.That(second.GetAwardedTo(A), Is.EqualTo(6));
             Assert.That(first.GetPot(0).GetPayout(1).HasOddChip, Is.True);
             Array.Reverse(hands);
-            PotSettlement reversed = PotSettlement.Showdown(Paid(5, 5, 1), hands, new[] { B, A });
+            PotSettlement reversed = PotSettlement.ShowdownByValue(Paid(5, 5, 1), hands, new[] { B, A });
             Assert.That(reversed.GetAwardedTo(B), Is.EqualTo(6));
         }
 
         [Test]
         public void MultipleRemainderChipsGoOneEachToWinningSeatsOnly()
         {
-            PotSettlement result = PotSettlement.Showdown(Paid(5, 5, 5, 2, 2),
+            PotSettlement result = PotSettlement.ShowdownByValue(Paid(5, 5, 5, 2, 2),
                 new[] { Strong(A), Strong(B, Suit.Hearts), Strong(C, Suit.Diamonds), Weak(D, Suit.Clubs) },
                 new[] { D, C, A, B });
             Assert.That(result.PotCount, Is.EqualTo(2));
@@ -141,7 +136,7 @@ namespace Poker.Foundation.Tests
         [Test]
         public void TwoOddChipsAmongThreeTiedWinnersUseDifferentRecipients()
         {
-            PotSettlement result = PotSettlement.Showdown(Paid(5, 5, 5, 2),
+            PotSettlement result = PotSettlement.ShowdownByValue(Paid(5, 5, 5, 2),
                 new[] { Strong(A), Strong(B, Suit.Hearts), Strong(C, Suit.Diamonds) }, new[] { C, A, B });
             Assert.That(result.GetAwardedTo(C), Is.EqualTo(6));
             Assert.That(result.GetAwardedTo(A), Is.EqualTo(6));
@@ -152,7 +147,7 @@ namespace Poker.Foundation.Tests
         [Test]
         public void DifferentEligibleGroupsStaySeparateEvenWhenTheirWinnersMatch()
         {
-            PotSettlement result = PotSettlement.Showdown(Paid(1, 3, 3, 2, 1),
+            PotSettlement result = PotSettlement.ShowdownByValue(Paid(1, 3, 3, 2, 1),
                 new[] { Weak(A), Strong(B), Strong(C, Suit.Hearts) }, new[] { B, C, A });
             Assert.That(result.PotCount, Is.EqualTo(2));
             Assert.That(result.GetPot(0).Amount, Is.EqualTo(5));
@@ -169,8 +164,8 @@ namespace Poker.Foundation.Tests
         {
             ChipLedger ledger = Paid(2, 5, 5, 3);
             PotSettlement result = null;
-            AssertFailure(SettlementFailure.MissingOddChipOrder, () => result = PotSettlement.Showdown(ledger,
-                new[] { Strong(A), Medium(B), new ShowdownHand(C, Run(Suit.Diamonds, 13)) }));
+            AssertFailure(SettlementFailure.MissingOddChipOrder, () => result = PotSettlement.ShowdownByValue(ledger,
+                new[] { Strong(A), Medium(B), new SeatHandValue(C, HandEvaluator.Evaluate(Run(Suit.Diamonds, 13))) }));
             Assert.That(result, Is.Null);
             Assert.That(ledger.TotalCommitted, Is.EqualTo(15));
             Assert.That(ledger.GetChips(A).Stack, Is.Zero);
@@ -181,7 +176,7 @@ namespace Poker.Foundation.Tests
         {
             ChipLedger ledger = Paid(5, 5, 1);
             var failure = new ApplicationException("Priority read failed.");
-            Assert.That(Assert.Throws<ApplicationException>(() => PotSettlement.Showdown(ledger,
+            Assert.That(Assert.Throws<ApplicationException>(() => PotSettlement.ShowdownByValue(ledger,
                 new[] { Strong(A), Strong(B, Suit.Hearts) }, new ThrowingPriority(failure))), Is.SameAs(failure));
             Assert.That(ledger.TotalCommitted, Is.EqualTo(11));
         }
@@ -208,10 +203,10 @@ namespace Poker.Foundation.Tests
                 if (live.Count == 1) result = PotSettlement.AwardUncontested(source, live[0]);
                 else
                 {
-                    var hands = new List<ShowdownHand>();
-                    for (int i = 0; i < live.Count; i++) hands.Add(new ShowdownHand(live[i], Run((Suit)(i + 1), random.Next(10, 15))));
+                    var hands = new List<SeatHandValue>();
+                    for (int i = 0; i < live.Count; i++) hands.Add(new SeatHandValue(live[i], HandEvaluator.Evaluate(Run((Suit)(i + 1), random.Next(10, 15)))));
                     live.Reverse();
-                    result = PotSettlement.Showdown(source, hands, live);
+                    result = PotSettlement.ShowdownByValue(source, hands, live);
                     for (int i = 0; i < result.PotCount; i++)
                     {
                         PotAward pot = result.GetPot(i);
@@ -233,7 +228,7 @@ namespace Poker.Foundation.Tests
         {
             ChipLedger ledger = Paid(40, 100);
             AssertFailure(SettlementFailure.UnmatchedContribution,
-                () => PotSettlement.Showdown(ledger, new[] { Strong(A), Medium(B) }));
+                () => PotSettlement.ShowdownByValue(ledger, new[] { Strong(A), Medium(B) }));
             AssertFailure(SettlementFailure.UnmatchedContribution, () => PotSettlement.AwardUncontested(ledger, B));
             Assert.That(ledger.TotalCommitted, Is.EqualTo(140));
         }
@@ -244,7 +239,7 @@ namespace Poker.Foundation.Tests
             BettingRound round = BettingRound.BeginUnopened(Starting(100, 40), new[] { A, B }, 2);
             round = round.Apply(A, BettingAction.BetTo(100)).Apply(B, BettingAction.Call());
             Assert.That(round.RefundedAmount, Is.EqualTo(60));
-            PotSettlement result = PotSettlement.Showdown(round.Ledger, new[] { Medium(A), Strong(B) });
+            PotSettlement result = PotSettlement.ShowdownByValue(round.Ledger, new[] { Medium(A), Strong(B) });
             Assert.That(result.Ledger.GetChips(A).Stack, Is.EqualTo(60));
             Assert.That(result.Ledger.GetChips(B).Stack, Is.EqualTo(80));
             AssertSettled(result, 80);
@@ -276,7 +271,7 @@ namespace Poker.Foundation.Tests
         {
             ChipLedger ledger = Paid(30, 30, 100, 100);
             AssertFailure(SettlementFailure.NoEligibleWinner,
-                () => PotSettlement.Showdown(ledger, new[] { Strong(A), Medium(B) }));
+                () => PotSettlement.ShowdownByValue(ledger, new[] { Strong(A), Medium(B) }));
             AssertFailure(SettlementFailure.NoEligibleWinner, () => PotSettlement.AwardUncontested(ledger, A));
             Assert.That(ledger.TotalCommitted, Is.EqualTo(260));
         }
@@ -285,8 +280,8 @@ namespace Poker.Foundation.Tests
         public void SettledLedgerCannotPayTheSameOutstandingPotAgain()
         {
             var hands = new[] { Strong(A), Medium(B) };
-            PotSettlement result = PotSettlement.Showdown(Paid(20, 20), hands);
-            AssertFailure(SettlementFailure.NothingToAward, () => PotSettlement.Showdown(result.Ledger, hands));
+            PotSettlement result = PotSettlement.ShowdownByValue(Paid(20, 20), hands);
+            AssertFailure(SettlementFailure.NothingToAward, () => PotSettlement.ShowdownByValue(result.Ledger, hands));
             AssertFailure(SettlementFailure.NothingToAward, () => PotSettlement.AwardUncontested(result.Ledger, A));
             Assert.That(result.TotalAwarded, Is.EqualTo(40));
         }
@@ -296,8 +291,8 @@ namespace Poker.Foundation.Tests
         {
             ChipLedger source = Paid(5, 5, 1);
             var hands = new[] { Strong(A), Strong(B, Suit.Hearts) };
-            PotSettlement x = PotSettlement.Showdown(source, hands, new[] { A, B });
-            PotSettlement y = PotSettlement.Showdown(source, hands, new[] { B, A });
+            PotSettlement x = PotSettlement.ShowdownByValue(source, hands, new[] { A, B });
+            PotSettlement y = PotSettlement.ShowdownByValue(source, hands, new[] { B, A });
             Assert.That(x.GetAwardedTo(A), Is.EqualTo(6));
             Assert.That(y.GetAwardedTo(A), Is.EqualTo(5));
             Assert.That(source.TotalCommitted, Is.EqualTo(11));
@@ -307,7 +302,7 @@ namespace Poker.Foundation.Tests
         public void TotalAtInt64BoundaryDoesNotOverflow()
         {
             long half = long.MaxValue / 2;
-            PotSettlement result = PotSettlement.Showdown(Paid(half, half, 1),
+            PotSettlement result = PotSettlement.ShowdownByValue(Paid(half, half, 1),
                 new[] { Strong(A), Strong(B, Suit.Hearts) }, new[] { B, A });
             Assert.That(result.GetAwardedTo(B), Is.EqualTo(half + 1));
             Assert.That(result.GetAwardedTo(A), Is.EqualTo(half));
@@ -318,7 +313,7 @@ namespace Poker.Foundation.Tests
         public void UncommittedStacksAndUninvolvedZeroSeatArePreserved()
         {
             ChipLedger ledger = Starting(100, 80, 0).Contribute(A, 10).Contribute(B, 10);
-            PotSettlement result = PotSettlement.Showdown(ledger, new[] { Strong(A), Medium(B) });
+            PotSettlement result = PotSettlement.ShowdownByValue(ledger, new[] { Strong(A), Medium(B) });
             Assert.That(result.Ledger.GetChips(A).Stack, Is.EqualTo(110));
             Assert.That(result.Ledger.GetChips(B).Stack, Is.EqualTo(70));
             Assert.That(result.Ledger.GetChips(C).Stack, Is.Zero);
@@ -327,9 +322,9 @@ namespace Poker.Foundation.Tests
         [Test]
         public void InputListsCanBeChangedAfterResultWithoutChangingIt()
         {
-            var hands = new List<ShowdownHand> { Strong(A), Strong(B, Suit.Hearts) };
+            var hands = new List<SeatHandValue> { Strong(A), Strong(B, Suit.Hearts) };
             var priority = new List<SeatId> { B, A };
-            PotSettlement result = PotSettlement.Showdown(Paid(5, 5, 1), hands, priority);
+            PotSettlement result = PotSettlement.ShowdownByValue(Paid(5, 5, 1), hands, priority);
             hands.Clear(); priority.Clear();
             Assert.That(result.GetAwardedTo(B), Is.EqualTo(6));
             Assert.That(result.GetPot(0).EligibleSeatCount, Is.EqualTo(2));
@@ -339,20 +334,14 @@ namespace Poker.Foundation.Tests
         public void NullEmptyDuplicateUnknownOrNonfundedLiveHandsAreRejected()
         {
             ChipLedger ledger = Paid(5, 5, 0);
-            Assert.Throws<ArgumentNullException>(() => PotSettlement.Showdown(null, new[] { Strong(A), Medium(B) }));
-            Assert.Throws<ArgumentNullException>(() => PotSettlement.Showdown(ledger, null));
-            Assert.Throws<ArgumentException>(() => PotSettlement.Showdown(ledger, Array.Empty<ShowdownHand>()));
-            Assert.Throws<ArgumentException>(() => PotSettlement.Showdown(ledger, new[] { Strong(A) }));
-            Assert.Throws<ArgumentException>(() => PotSettlement.Showdown(ledger, new[] { Strong(A), Strong(A) }));
-            Assert.Throws<ArgumentException>(() => PotSettlement.Showdown(ledger, new[] { Strong(A), null }));
-            Assert.Throws<KeyNotFoundException>(() => PotSettlement.Showdown(ledger, new[] { Strong(A), Medium(D) }));
-            Assert.Throws<ArgumentException>(() => PotSettlement.Showdown(ledger, new[] { Strong(A), Medium(C) }));
-        }
-
-        [Test]
-        public void SamePhysicalCardAcrossLiveHandsIsRejected()
-        {
-            Assert.Throws<ArgumentException>(() => PotSettlement.Showdown(Paid(5, 5), new[] { Strong(A), Strong(B) }));
+            Assert.Throws<ArgumentNullException>(() => PotSettlement.ShowdownByValue(null, new[] { Strong(A), Medium(B) }));
+            Assert.Throws<ArgumentNullException>(() => PotSettlement.ShowdownByValue(ledger, null));
+            Assert.Throws<ArgumentException>(() => PotSettlement.ShowdownByValue(ledger, Array.Empty<SeatHandValue>()));
+            Assert.Throws<ArgumentException>(() => PotSettlement.ShowdownByValue(ledger, new[] { Strong(A) }));
+            Assert.Throws<ArgumentException>(() => PotSettlement.ShowdownByValue(ledger, new[] { Strong(A), Strong(A) }));
+            Assert.Throws<ArgumentException>(() => PotSettlement.ShowdownByValue(ledger, new[] { Strong(A), null }));
+            Assert.Throws<KeyNotFoundException>(() => PotSettlement.ShowdownByValue(ledger, new[] { Strong(A), Medium(D) }));
+            Assert.Throws<ArgumentException>(() => PotSettlement.ShowdownByValue(ledger, new[] { Strong(A), Medium(C) }));
         }
 
         [Test]
@@ -362,7 +351,7 @@ namespace Poker.Foundation.Tests
             var hands = new[] { Strong(A), Strong(B, Suit.Hearts) };
             foreach (SeatId[] invalid in new[] { new SeatId[0], new[] { A }, new[] { A, A }, new[] { A, C },
                 new[] { A, default(SeatId) }, new[] { A, B, C } })
-                Assert.Throws<ArgumentException>(() => PotSettlement.Showdown(ledger, hands, invalid));
+                Assert.Throws<ArgumentException>(() => PotSettlement.ShowdownByValue(ledger, hands, invalid));
             Assert.That(ledger.TotalCommitted, Is.EqualTo(11));
         }
 
@@ -380,7 +369,7 @@ namespace Poker.Foundation.Tests
             ChipLedger ledger = Paid(5, 5);
             var failure = new ApplicationException("Input read failed.");
             PotSettlement result = null;
-            Assert.That(Assert.Throws<ApplicationException>(() => result = PotSettlement.Showdown(ledger,
+            Assert.That(Assert.Throws<ApplicationException>(() => result = PotSettlement.ShowdownByValue(ledger,
                 new ThrowingHands(failure))), Is.SameAs(failure));
             Assert.That(result, Is.Null);
             Assert.That(ledger.TotalCommitted, Is.EqualTo(10));
@@ -389,7 +378,7 @@ namespace Poker.Foundation.Tests
         [Test]
         public void ResultQueriesGuardIndicesAndSeatIds()
         {
-            PotSettlement result = PotSettlement.Showdown(Paid(5, 5), new[] { Strong(A), Medium(B) });
+            PotSettlement result = PotSettlement.ShowdownByValue(Paid(5, 5), new[] { Strong(A), Medium(B) });
             Assert.Throws<ArgumentOutOfRangeException>(() => result.GetPot(-1));
             Assert.Throws<ArgumentOutOfRangeException>(() => result.GetPot(1));
             Assert.Throws<ArgumentOutOfRangeException>(() => result.GetPot(0).GetEligibleSeat(2));
@@ -399,35 +388,19 @@ namespace Poker.Foundation.Tests
         }
 
         [Test]
-        public void ShowdownHandCopiesCardsAndRejectsMalformedHands()
+        public void RankedSeatRejectsInvalidOwnerAndUnevaluatedValue()
         {
-            var cards = Run(Suit.Spades, 14);
-            var hand = new ShowdownHand(A, cards);
-            Array.Clear(cards, 0, cards.Length);
-            Assert.That(hand.Value.Category, Is.EqualTo(HandCategory.StraightFlush));
-            Assert.That(hand.Value.GetTieBreaker(0), Is.EqualTo(14));
-            Assert.Throws<ArgumentNullException>(() => new ShowdownHand(A, null));
-            Assert.Throws<ArgumentException>(() => new ShowdownHand(A, new Card[4]));
-            Assert.Throws<ArgumentException>(() => new ShowdownHand(default, Run(Suit.Spades, 14)));
-            Assert.Throws<ArgumentException>(() => new ShowdownHand(A, new Card[5]));
-            cards = Run(Suit.Spades, 14); cards[1] = cards[0];
-            Assert.Throws<ArgumentException>(() => new ShowdownHand(A, cards));
+            HandValue value = HandEvaluator.Evaluate(Run(Suit.Spades, 14));
+            Assert.Throws<ArgumentException>(() => new SeatHandValue(default, value));
+            Assert.Throws<ArgumentException>(() => new SeatHandValue(A, default));
+            var ranked = new SeatHandValue(A, value);
+            Assert.That(ranked.Owner, Is.EqualTo(A));
+            Assert.That(ranked.Value, Is.EqualTo(value));
         }
 
-        [Test]
-        public void ExistingImmutableSeatHandKeepsItsOwnerWhenConnected()
-        {
-            InitialDeal deal = InitialDeal.Create(new IdentityRandom(), new[] { A, B });
-            SeatHand original = deal.GetHand(B);
-            var showdown = new ShowdownHand(original);
-            Assert.That(showdown.Owner, Is.EqualTo(B));
-            Assert.That(showdown.Value, Is.EqualTo(HandEvaluator.Evaluate(original)));
-            Assert.Throws<ArgumentNullException>(() => new ShowdownHand((SeatHand)null));
-        }
-
-        private static ShowdownHand Strong(SeatId seat, Suit suit = Suit.Spades) => new ShowdownHand(seat, Run(suit, 14));
-        private static ShowdownHand Medium(SeatId seat) => new ShowdownHand(seat, Run(Suit.Hearts, 13));
-        private static ShowdownHand Weak(SeatId seat, Suit suit = Suit.Diamonds) => new ShowdownHand(seat, Run(suit, 12));
+        private static SeatHandValue Strong(SeatId seat, Suit suit = Suit.Spades) => new SeatHandValue(seat, HandEvaluator.Evaluate(Run(suit, 14)));
+        private static SeatHandValue Medium(SeatId seat) => new SeatHandValue(seat, HandEvaluator.Evaluate(Run(Suit.Hearts, 13)));
+        private static SeatHandValue Weak(SeatId seat, Suit suit = Suit.Diamonds) => new SeatHandValue(seat, HandEvaluator.Evaluate(Run(suit, 12)));
         private static Card[] Run(Suit suit, int high)
         {
             var cards = new Card[5];
@@ -494,13 +467,13 @@ namespace Poker.Foundation.Tests
             Assert.That(paid, Is.EqualTo((decimal)amount));
             Assert.That(pots, Is.EqualTo((decimal)amount));
         }
-        private sealed class ThrowingHands : IReadOnlyList<ShowdownHand>
+        private sealed class ThrowingHands : IReadOnlyList<SeatHandValue>
         {
             private readonly Exception failure;
             public ThrowingHands(Exception failure) { this.failure = failure; }
             public int Count => 2;
-            public ShowdownHand this[int index] => index == 0 ? Strong(A) : throw failure;
-            public IEnumerator<ShowdownHand> GetEnumerator() { throw new NotSupportedException(); }
+            public SeatHandValue this[int index] => index == 0 ? Strong(A) : throw failure;
+            public IEnumerator<SeatHandValue> GetEnumerator() { throw new NotSupportedException(); }
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
         private sealed class ThrowingPriority : IReadOnlyList<SeatId>
@@ -511,10 +484,6 @@ namespace Poker.Foundation.Tests
             public SeatId this[int index] => index == 0 ? A : throw failure;
             public IEnumerator<SeatId> GetEnumerator() { throw new NotSupportedException(); }
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
-        }
-        private sealed class IdentityRandom : IRandomSource
-        {
-            public int NextInt(int exclusiveUpperBound) => exclusiveUpperBound - 1;
         }
     }
 }

@@ -11,7 +11,7 @@ using UnityEngine.UIElements;
 
 namespace Poker.Editor
 {
-    /// <summary>Separate Hold'em sample. Existing Draw scene and settings are never overwritten.</summary>
+    /// <summary>Creates and builds the Hold'em table with its own scene, panel and settings.</summary>
     public static class HoldemSceneBuilder
     {
         public const string ScenePath = "Assets/Poker/Samples/HoldemTable.unity";

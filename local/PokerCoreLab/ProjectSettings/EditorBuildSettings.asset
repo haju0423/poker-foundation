@@ -4,6 +4,9 @@
 EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
-  m_Scenes: []
+  m_Scenes:
+  - enabled: 1
+    path: Assets/Poker/Samples/HoldemTable.unity
+    guid: 8f79046473c054fbd959918e97a958cf
   m_configObjects: {}
   m_UseUCBPForAssetBundles: 0

@@ -31,12 +31,6 @@ namespace Poker.Foundation.Tests
             Assert.That(KoreanPokerText.BetLabel(100, true), Is.EqualTo("베팅 · 100칩 (올인)"));
         }
 
-        [TestCase(0, "그대로 유지하고 확정")]
-        [TestCase(3, "선택한 3장 교환")]
-        [TestCase(5, "선택한 5장 교환")]
-        public void ExchangeMakesZeroSelectionAnExplicitConfirmation(int count, string label) =>
-            Assert.That(KoreanPokerText.ExchangeLabel(count), Is.EqualTo(label));
-
         [Test]
         public void PotAndPayoutLabelsDoNotCallGrossReceiptsProfit()
         {
@@ -108,25 +102,32 @@ namespace Poker.Foundation.Tests
         {
             Assert.Throws<ArgumentOutOfRangeException>(() => KoreanPokerText.Chips(-1));
             Assert.Throws<ArgumentOutOfRangeException>(() => KoreanPokerText.PotName(-1));
-            Assert.Throws<ArgumentOutOfRangeException>(() => KoreanPokerText.ExchangeLabel(-1));
-            Assert.Throws<ArgumentOutOfRangeException>(() => KoreanPokerText.ExchangeLabel(6));
             Assert.Throws<ArgumentOutOfRangeException>(() => KoreanPokerText.ActionName((BettingActionKind)99));
             Assert.Throws<ArgumentOutOfRangeException>(() => KoreanPokerText.SettlementMessage((SettlementFailure)99));
             Assert.Throws<ArgumentOutOfRangeException>(() => KoreanPokerText.SettlementMessage(default));
             Assert.Throws<ArgumentException>(() => KoreanPokerText.HandName(default));
             Assert.Throws<ArgumentException>(() => KoreanPokerText.CardName(default));
+            Assert.Throws<ArgumentException>(() => KoreanPokerText.RankLabel(default));
             Assert.Throws<ArgumentOutOfRangeException>(() => KoreanPokerText.PayoutLabel(0, true));
         }
 
         [Test]
-        public void HelpTextPreservesFoldKeepAndAllInExchangeMeaning()
+        public void HelpTextExplainsFoldCheckAndAllInWithoutCardExchange()
         {
             Assert.That(KoreanPokerText.FoldHelp, Does.Contain("확정된 칩"));
             Assert.That(KoreanPokerText.CheckHelp, Does.Contain("추가로 칩을 내지 않고"));
-            Assert.That(KoreanPokerText.KeepHandHelp, Does.Contain("교환 차례를 마칩니다"));
-            Assert.That(KoreanPokerText.AllInHelp, Does.Contain("폴드하지 않았다면"));
-            Assert.That(KoreanPokerText.ExchangeHelp, Does.Contain("한 장도 고르지 않으면"));
+            Assert.That(KoreanPokerText.AllInHelp, Does.Contain("해당하는 팟"));
+            Assert.That(KoreanPokerText.AllInHelp, Does.Not.Contain("교환"));
         }
+
+        [TestCase(Rank.Ace, "A")]
+        [TestCase(Rank.King, "K")]
+        [TestCase(Rank.Queen, "Q")]
+        [TestCase(Rank.Jack, "J")]
+        [TestCase(Rank.Ten, "10")]
+        [TestCase(Rank.Two, "2")]
+        public void CardFacesUseTheSharedRankLabel(Rank rank, string expected) =>
+            Assert.That(KoreanPokerText.RankLabel(new Card(rank, Suit.Spades)), Is.EqualTo(expected));
 
         private static Card[] Parse(string notation)
         {

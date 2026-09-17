@@ -362,7 +362,7 @@ namespace Poker.Runtime
             var box = new VisualElement(); box.AddToClassList("omc-card"); box.AddToClassList("face-card");
             box.EnableInClassList("red", card.Suit == Suit.Diamonds || card.Suit == Suit.Hearts);
             box.EnableInClassList("best", best); box.tooltip = KoreanPokerText.CardName(card);
-            box.Add(Text(KoreanTableText.RankLabel(card), "omc-rank"));
+            box.Add(Text(KoreanPokerText.RankLabel(card), "omc-rank"));
             box.Add(Text(SuitSymbol(card.Suit), "omc-suit")); return box;
         }
         public static string SuitSymbol(Suit suit)

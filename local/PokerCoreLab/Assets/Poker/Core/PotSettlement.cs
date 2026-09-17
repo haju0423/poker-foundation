@@ -43,40 +43,10 @@ namespace Poker.Foundation
         }
 
         /// <summary>
-        /// Caller supplies every nonfolded hand after betting/draw completes. Missing hands are treated as folded.
+        /// Settles matched contribution layers from caller-validated values after betting completes.
+        /// The caller validates hole cards and the shared board. Missing values are treated as folded.
         /// Priority must contain exactly all live seats, or be null while the odd-chip policy remains unresolved.
         /// Null priority succeeds only when no tied pot has a remainder; never uses input order as a fallback.
-        /// </summary>
-        public static PotSettlement Showdown(ChipLedger ledger, IReadOnlyList<ShowdownHand> liveHands,
-            IReadOnlyList<SeatId> oddChipPriority = null)
-        {
-            if (ledger == null) throw new ArgumentNullException(nameof(ledger));
-            if (liveHands == null) throw new ArgumentNullException(nameof(liveHands));
-            // Preserve the original Draw API's validation precedence before card inspection.
-            RequireMatchedPot(ledger);
-            int count = liveHands.Count;
-            if (count < 2 || count > ledger.SeatCount) throw new ArgumentException("At least two live hands are required.", nameof(liveHands));
-            var ranked = new SeatHandValue[count];
-            var owners = new HashSet<SeatId>();
-            var cards = new HashSet<Card>();
-            for (int i = 0; i < count; i++)
-            {
-                ShowdownHand hand = liveHands[i];
-                if (hand == null || !owners.Add(hand.Owner))
-                    throw new ArgumentException("Live hands must be non-null and have unique owners.", nameof(liveHands));
-                long paid = ledger.GetChips(hand.Owner).Committed;
-                if (paid == 0) throw new ArgumentException("A live hand must have contributed to this pot.", nameof(liveHands));
-                for (int j = 0; j < SeatHand.CardCount; j++)
-                    if (!cards.Add(hand.GetCard(j))) throw new ArgumentException("Live hands share a physical card.", nameof(liveHands));
-                ranked[i] = new SeatHandValue(hand.Owner, hand.Value);
-            }
-            return ShowdownByValue(ledger, ranked, oddChipPriority);
-        }
-
-        /// <summary>
-        /// Settles matched contribution layers from caller-validated values. Unlike Showdown,
-        /// this overload makes no physical-card uniqueness claim, so community-card games can
-        /// share a board while reusing the same side-pot and odd-chip engine.
         /// </summary>
         public static PotSettlement ShowdownByValue(ChipLedger ledger,
             IReadOnlyList<SeatHandValue> liveValues, IReadOnlyList<SeatId> oddChipPriority = null)
