@@ -5,8 +5,8 @@ NPC 3명과 플레이하는 텍사스 홀덤 게임입니다.
 
 ## 다운로드
 
-- [Windows](https://github.com/haju0423/poker-foundation/releases/download/2026.09.16-holdem-preview/OneMoreCard-Windows.zip)
-- [Mac](https://github.com/haju0423/poker-foundation/releases/download/2026.09.16-holdem-preview/OneMoreCard-macOS.zip)
+- [Windows](https://github.com/haju0423/poker-foundation/releases/download/2026.09.19-holdem/OneMoreCard-Windows.zip)
+- [Mac](https://github.com/haju0423/poker-foundation/releases/download/2026.09.19-holdem/OneMoreCard-macOS.zip)
 
 Windows는 압축을 모두 풀고 `One More Card.exe`를 실행합니다. 같은 폴더의 다른 파일도 함께 있어야 합니다.
 Mac은 압축을 풀고 `One More Card.app`을 실행합니다.
@@ -22,7 +22,18 @@ Mac은 압축을 풀고 `One More Card.app`을 실행합니다.
 
 ## 프로젝트 실행
 
-Unity 6000.3.23f1에서 `local/PokerCoreLab` 폴더를 열고,
-`Assets/Poker/Samples/HoldemTable.unity` 장면을 실행합니다.
+Unity 6000.3.23f1에서 [프로젝트 폴더](local/PokerCoreLab)를 열고,
+[HoldemTable.unity](local/PokerCoreLab/Assets/Poker/Samples/HoldemTable.unity) 장면을 실행합니다.
+
+## 코드 구성
+
+`Assets/Poker` 아래에 기능별로 나뉘어 있습니다.
+
+- `Core`: 카드·족보·베팅·팟 정산·게임 진행
+- `Application`: 로컬 테이블과 NPC 행동
+- `Presentation`: 한글 문구와 표시 형식
+- `Runtime`: 게임 화면과 입력 처리
+- `Editor`: 장면 구성과 Windows·Mac 빌드
+- `Tests`: 포커 규칙과 화면 동작 테스트
 
 폰트 라이선스: [OFL.txt](local/PokerCoreLab/Assets/Poker/Resources/Fonts/OFL.txt)

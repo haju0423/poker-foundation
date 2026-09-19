@@ -71,7 +71,7 @@ namespace Poker.Foundation
 
         /// <summary>
         /// Starts a zero-payment street using the caller's nonfolded order, including all-in seats.
-        /// Prior contributions are preserved. This is not proof the previous street or draw is complete.
+        /// Preserves prior contributions; the caller controls when to advance to the next round.
         /// </summary>
         public static BettingRound BeginUnopened(ChipLedger ledger, IReadOnlyList<SeatId> activeOrder,
             long minimumBet)

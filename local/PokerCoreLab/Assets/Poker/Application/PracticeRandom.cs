@@ -4,7 +4,7 @@ using Poker.Foundation;
 
 namespace Poker.Application
 {
-    /// <summary>OS random bytes with rejection sampling. Local practice only; not a fairness certification.</summary>
+    /// <summary>Generates bounded random values from OS entropy using rejection sampling.</summary>
     public sealed class PracticeRandom : IRandomSource, IDisposable
     {
         private readonly RandomNumberGenerator generator = RandomNumberGenerator.Create();

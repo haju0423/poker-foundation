@@ -97,16 +97,16 @@ namespace Poker.Runtime
             next.AddToClassList("omc-primary");
             reset = Click("처음부터", "omc-reset", Restart); reset.AddToClassList("omc-quiet");
             retry = Click("진행 다시 확인", "omc-retry", Recover);
-            resolve = Click("이번 판에 임시 규칙 적용", "omc-resolve", () =>
+            resolve = Click(KoreanPokerText.SplitRemainderLabel, "omc-resolve", () =>
             {
                 if (CanInteract() && view.IsSettlementPending) Run(() => port.ResolvePendingSettlement(view.SessionVersion));
             });
-            resolve.tooltip = "동률인 승자 중 버튼 다음 자리부터 남는 칩을 지급해요. 이번 판에만 적용하며 팀의 최종 규칙을 정하지 않아요.";
+            resolve.tooltip = KoreanPokerText.SplitRemainderHelp;
             foreach (var button in new[] { fold, passive, aggressive, next, reset, retry, resolve }) actionRow.Add(button);
             error = Text("", "omc-error"); controls.Add(error);
             help = Box("omc-overlay", root);
             var helpCard = Box("omc-help-card", help);
-            helpCard.Add(Text("한 판만 해보면 돼요", "omc-help-title"));
+            helpCard.Add(Text("플레이 방법", "omc-help-title"));
             helpCard.Add(Text(HelpText, "omc-help-copy"));
             helpCard.Add(Click("닫기", "omc-close-help", () => { helpOpen = false; Show(help, false); }));
             Show(help, false);
@@ -153,7 +153,7 @@ namespace Poker.Runtime
                     : Empty(i == 1 ? "플랍" : i == 3 ? "턴" : i == 4 ? "리버" : ""));
             result.text = pending ? "팟 분배 · 남는 칩 지급 대기" : ResultText();
             Show(result, complete || pending);
-            last.text = pending ? "동률인 승자 중 버튼 다음 자리부터 남는 칩을 지급해요." : NoticeText();
+            last.text = pending ? KoreanPokerText.SplitRemainderHelp : NoticeText();
             LegalBettingActions legal = view.LegalActions;
             bool active = legal != null && !paused && Time.realtimeSinceStartupAsDouble >= lockedUntil;
             bool canAggress = legal != null && (legal.CanBet || legal.CanRaise);
@@ -171,7 +171,7 @@ namespace Poker.Runtime
             Show(reset, complete && !paused); reset.SetEnabled(!paused && Time.realtimeSinceStartupAsDouble >= lockedUntil);
             reset.tooltip = "모든 참가자의 칩을 " + KoreanPokerText.Chips(startingStack) + "으로 초기화합니다.";
             Show(retry, paused);
-            prompt.text = pending ? "이번 판의 남는 칩 지급 방법을 선택해 주세요."
+            prompt.text = pending ? KoreanPokerText.SplitRemainderPrompt
                 : complete ? (view.IsOver ? (view.OwnStack > 0 ? "모든 칩을 가져왔어요!" : "테이블 승부가 끝났어요.")
                     : view.OwnStack == 0 ? "칩을 모두 잃었어요. 다음 판은 관전할 수 있어요." : "다음 판에도 칩은 그대로 이어져요.")
                 : own.Status == HoldemSeatStatus.Busted ? "관전 중 · " + ActorText()
@@ -197,7 +197,7 @@ namespace Poker.Runtime
             {
                 long total = long.Parse(amount.value, CultureInfo.InvariantCulture);
                 aggressive.text += "  " + KoreanPokerText.Chips(total);
-                hint.text = KoreanPokerText.Chips(total - view.OwnStreetContribution) + " 추가";
+                hint.text = KoreanPokerText.AdditionalChips(total - view.OwnStreetContribution);
             }
         }
 
@@ -338,7 +338,7 @@ namespace Poker.Runtime
                     var paid = award.GetPayout(j);
                     recipients.Add(SeatName(paid.Seat) + " " + KoreanPokerText.Chips(paid.Amount));
                 }
-                lines.Add((i == 0 ? "메인 팟" : "사이드 팟 " + i) + " · " + string.Join(", ", recipients));
+                lines.Add(KoreanPokerText.PotName(i) + " · " + string.Join(", ", recipients));
             }
             return string.Join("\n", lines);
         }
@@ -355,7 +355,7 @@ namespace Poker.Runtime
             var notice = port.LastAction;
             if (notice == null) return "공용 카드가 차례로 열려요.";
             return SeatName(notice.Seat) + " · " + KoreanPokerText.ActionName(notice.Kind)
-                + (notice.Paid > 0 ? " · " + KoreanPokerText.Chips(notice.Paid) + " 추가" : "");
+                + (notice.Paid > 0 ? " · " + KoreanPokerText.AdditionalChips(notice.Paid) : "");
         }
         private static VisualElement Face(Card card, bool best)
         {

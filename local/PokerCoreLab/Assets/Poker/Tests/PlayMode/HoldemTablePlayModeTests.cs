@@ -227,6 +227,8 @@ namespace Poker.Runtime.Tests
             screen = new HoldemTableScreen(Root, port, () => restarts++, 100, Resources.Load<Font>("Fonts/NanumGothic-Regular"));
             for (int i = 0; i < 5; i++) yield return null;
             Assert.That(port.Read().IsSettlementPending, Is.True);
+            Assert.That(Root.Q<Button>("omc-resolve").text, Is.EqualTo("남은 칩 나누기"));
+            Assert.That(Root.Q<Button>("omc-resolve").tooltip, Does.Contain("이번 판에만 적용"));
             Assert.That(Root.Q<Button>("omc-next").resolvedStyle.display, Is.EqualTo(DisplayStyle.None));
             AssertButtonHit("omc-resolve"); AssertLayout(); Capture("four-seat-odd-chip-pending");
             long version = port.Read().SessionVersion;
@@ -238,7 +240,8 @@ namespace Poker.Runtime.Tests
             Assert.That(port.Read().GetSeatAt(1).Stack, Is.EqualTo(8));
             Assert.That(port.Read().GetSeatAt(2).Stack, Is.EqualTo(7));
             Assert.That(Root.Q<Label>(className: "omc-result").text, Is.EqualTo("팟별 정산 완료"));
-            Assert.That(Root.Q<Label>(className: "omc-pot").tooltip, Does.Contain("사이드 팟 1"));
+            Assert.That(Root.Q<Label>(className: "omc-pot").tooltip,
+                Is.EqualTo("메인 팟 · 나 20칩\n사이드 팟 1 · 상대 1 8칩, 상대 2 7칩"));
             yield return null; AssertLayout(); Capture("four-seat-side-pots");
         }
 

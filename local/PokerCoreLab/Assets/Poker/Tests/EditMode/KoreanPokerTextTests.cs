@@ -41,7 +41,7 @@ namespace Poker.Foundation.Tests
             Assert.That(KoreanPokerText.RefundMessage(60), Is.EqualTo("다른 사람이 따라 내지 않은 60칩을 돌려받습니다."));
         }
 
-        [TestCase(SettlementFailure.MissingOddChipOrder, "남는 칩의 지급 기준이 아직 정해지지 않았습니다.")]
+        [TestCase(SettlementFailure.MissingOddChipOrder, "동률로 남은 칩을 나눠야 정산을 마칠 수 있습니다.")]
         [TestCase(SettlementFailure.UnmatchedContribution, "돌려줄 칩을 먼저 처리해야 정산할 수 있습니다.")]
         [TestCase(SettlementFailure.NoEligibleWinner, "팟을 받을 수 있는 참가자 정보가 맞지 않습니다.")]
         [TestCase(SettlementFailure.NothingToAward, "정산할 칩이 없습니다.")]
@@ -118,6 +118,15 @@ namespace Poker.Foundation.Tests
             Assert.That(KoreanPokerText.CheckHelp, Does.Contain("추가로 칩을 내지 않고"));
             Assert.That(KoreanPokerText.AllInHelp, Does.Contain("해당하는 팟"));
             Assert.That(KoreanPokerText.AllInHelp, Does.Not.Contain("교환"));
+        }
+
+        [Test]
+        public void RemainderActionExplainsThePayoutAndItsScope()
+        {
+            Assert.That(KoreanPokerText.SplitRemainderLabel, Is.EqualTo("남은 칩 나누기"));
+            Assert.That(KoreanPokerText.SplitRemainderHelp, Does.Contain("동률인 승자 중 버튼 다음 자리"));
+            Assert.That(KoreanPokerText.SplitRemainderHelp, Does.Contain("이번 판에만 적용"));
+            Assert.That(KoreanPokerText.SplitRemainderPrompt, Does.Contain("정산이 끝나요"));
         }
 
         [TestCase(Rank.Ace, "A")]

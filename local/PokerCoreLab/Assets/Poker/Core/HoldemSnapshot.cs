@@ -218,7 +218,7 @@ namespace Poker.Foundation
             return board[index];
         }
 
-        // Heads-up compatibility surface used by the current local table.
+        // Viewer aliases work at every table size; singular opponent aliases require two seats.
         public SeatId OpponentSeat => CompatibilityOpponent().Seat;
         public SeatId? BustedSeat
         {

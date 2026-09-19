@@ -4,10 +4,7 @@ using Poker.Foundation;
 
 namespace Poker.Presentation
 {
-    /// <summary>
-    /// Korean-first text only. Inputs are verified amounts/reasons from the authority, not a second rules engine.
-    /// No global culture changes, exception-message parsing, player names, card ownership or UI side effects.
-    /// </summary>
+    /// <summary>Korean labels and formatting for poker actions, cards and settlement.</summary>
     public static class KoreanPokerText
     {
         public static string ActionName(BettingActionKind kind)
@@ -26,6 +23,9 @@ namespace Poker.Presentation
         public static string FoldHelp => "이번 판의 승부를 포기합니다. 이미 팟에 확정된 칩은 돌려받지 않습니다.";
         public static string CheckHelp => "추가로 칩을 내지 않고 차례를 넘깁니다.";
         public static string AllInHelp => "남은 칩을 모두 냅니다. 낸 칩에 해당하는 팟의 승부에는 계속 참여합니다.";
+        public static string SplitRemainderLabel => "남은 칩 나누기";
+        public static string SplitRemainderHelp => "동률인 승자 중 버튼 다음 자리부터 남는 칩을 지급해요. 이번 판에만 적용해요.";
+        public static string SplitRemainderPrompt => "남은 칩을 나누면 이번 판 정산이 끝나요.";
 
         public static string Chips(long amount)
         {
@@ -68,7 +68,7 @@ namespace Poker.Presentation
         {
             switch (reason)
             {
-                case SettlementFailure.MissingOddChipOrder: return "남는 칩의 지급 기준이 아직 정해지지 않았습니다.";
+                case SettlementFailure.MissingOddChipOrder: return "동률로 남은 칩을 나눠야 정산을 마칠 수 있습니다.";
                 case SettlementFailure.UnmatchedContribution: return "돌려줄 칩을 먼저 처리해야 정산할 수 있습니다.";
                 case SettlementFailure.NoEligibleWinner: return "팟을 받을 수 있는 참가자 정보가 맞지 않습니다.";
                 case SettlementFailure.NothingToAward: return "정산할 칩이 없습니다.";
