@@ -9,8 +9,9 @@ namespace Poker.Foundation.Tests
         private static readonly SeatId A = new SeatId(1);
         private static readonly SeatId B = new SeatId(2);
 
-        [Test]
-        public void SeededLegalActionFuzzAlwaysFinishesConservesChipsAndHasNoDuplicateCards()
+        [TestCase(HoldemRevealPolicy.Automatic)]
+        [TestCase(HoldemRevealPolicy.PauseAfterCommunityReveal)]
+        public void SeededLegalActionFuzzAlwaysFinishesConservesChipsAndHasNoDuplicateCards(HoldemRevealPolicy policy)
         {
             for (int seed = 0; seed < 128; seed++)
             {
@@ -20,12 +21,13 @@ namespace Poker.Foundation.Tests
                 long total = firstStack + secondStack;
                 HoldemHand hand = HoldemHand.Begin(Guid.NewGuid(), ChipLedger.Create(new[] {
                     new SeatChips(A, firstStack), new SeatChips(B, secondStack) }),
-                    A, B, new HoldemConfig(100, 1, 2), new SeededRandom(seed));
+                    A, B, new HoldemConfig(100, 1, 2, policy), new SeededRandom(seed));
 
                 int actions = 0;
                 while (!hand.IsComplete && actions++ < 256)
                 {
                     AssertConserved(hand.Ledger, total);
+                    if (hand.IsRevealPending) { hand = hand.ResumeAfterReveal(hand.Street); continue; }
                     LegalBettingActions legal = hand.CurrentBetting.GetLegalActions();
                     BettingAction action;
                     int choice = decisions.Next(6);

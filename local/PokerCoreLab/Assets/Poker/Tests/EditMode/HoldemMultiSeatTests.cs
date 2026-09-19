@@ -53,8 +53,9 @@ namespace Poker.Foundation.Tests
             Assert.Throws<InvalidOperationException>(() => { var ignored = aView.OpponentSeat; });
         }
 
-        [Test]
-        public void OddSidePotWaitsAtomicallyThenTrustedClockwiseResolutionIsIdempotent()
+        [TestCase(HoldemRevealPolicy.Automatic)]
+        [TestCase(HoldemRevealPolicy.PauseAfterCommunityReveal)]
+        public void OddSidePotWaitsAtomicallyThenTrustedClockwiseResolutionIsIdempotent(HoldemRevealPolicy policy)
         {
             Card[] prefix = {
                 CardOf("Js"), CardOf("Jd"), CardOf("2c"), CardOf("3h"),
@@ -66,7 +67,7 @@ namespace Poker.Foundation.Tests
                 new SeatChips(A, 5), new SeatChips(B, 10),
                 new SeatChips(C, 10), new SeatChips(D, 10)
             });
-            var session = new HoldemSession(Guid.NewGuid(), new HoldemConfig(100, 1, 2),
+            var session = new HoldemSession(Guid.NewGuid(), new HoldemConfig(100, 1, 2, policy),
                 ledger, Table, A, new PrefixRandom(prefix));
             Start(session);
 
@@ -74,6 +75,18 @@ namespace Poker.Foundation.Tests
             Submit(session, A, BettingAction.Call());
             Submit(session, B, BettingAction.Call());
             Submit(session, C, BettingAction.Call());
+
+            if (policy == HoldemRevealPolicy.PauseAfterCommunityReveal)
+                for (int stage = 1; stage <= 3; stage++)
+                {
+                    var reveal = session.GetSnapshot(A);
+                    Assert.That(reveal.IsRevealPending, Is.True);
+                    Assert.That((int)reveal.Street, Is.EqualTo(stage));
+                    Assert.That(reveal.GetSeat(B).VisibleHoleCardCount, Is.Zero);
+                    Assert.That(reveal.PotAmount, Is.EqualTo(35));
+                    Assert.That(session.ResumeAfterReveal(new HoldemRevealCommand(reveal.SessionId, reveal.HandId,
+                        Guid.NewGuid(), reveal.SessionVersion, reveal.Street)).Accepted, Is.True);
+                }
 
             HoldemSnapshot pending = session.GetSnapshot(A);
             Assert.That(pending.Street, Is.EqualTo(HoldemStreet.River));

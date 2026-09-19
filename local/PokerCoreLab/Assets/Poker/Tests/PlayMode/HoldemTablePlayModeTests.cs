@@ -160,6 +160,78 @@ namespace Poker.Runtime.Tests
         }
 
         [UnityTest]
+        public IEnumerator ActiveHandResetDialogBlocksInputAndCancelKeepsTheSameHand()
+        {
+            screen.Dispose();
+            screen = new HoldemTableScreen(Root, table.Human, () => restarts++, 100,
+                Resources.Load<Font>("Fonts/NanumGothic-Regular"), () => restarts++);
+            var before = table.Human.Read();
+            yield return Resize(new Vector2Int(960, 640));
+            AssertButtonHit("omc-reset"); Submit("omc-reset"); yield return null;
+            Assert.That(screen.IsProgressPaused, Is.True);
+            Submit("omc-fold"); Submit("omc-passive"); Submit("omc-confirm-reset"); Submit("omc-confirm-reset");
+            Assert.That(restarts, Is.EqualTo(1), "One explicit confirmation must invoke one reset only.");
+            Assert.That(table.Human.Read().SessionVersion, Is.EqualTo(before.SessionVersion));
+            Assert.That(table.Human.Read().OwnStack, Is.EqualTo(before.OwnStack));
+            Submit("omc-reset"); Submit("omc-cancel-reset"); yield return null;
+            Assert.That(screen.IsProgressPaused, Is.False);
+            Assert.That(table.Human.Read().HandId, Is.EqualTo(before.HandId));
+            Assert.That(restarts, Is.EqualTo(1)); AssertLayout();
+        }
+
+        [UnityTest]
+        public IEnumerator OptionsDialogCancelsWithoutChangesAndAppliesOnce()
+        {
+            screen.Dispose();
+            var original = new HoldemTableOptions(2, 0.7f, HoldemRevealPolicy.Automatic);
+            HoldemTableOptions received = null; int changes = 0;
+            screen = new HoldemTableScreen(Root, table.Human, () => restarts++, 100,
+                Resources.Load<Font>("Fonts/NanumGothic-Regular"), options: original,
+                configureTable: value => { changes++; received = value; });
+            yield return Resize(new Vector2Int(960, 640));
+            long version = table.Human.Read().SessionVersion;
+            AssertButtonHit("omc-options"); Submit("omc-options"); yield return null;
+            Root.Q<DropdownField>("omc-options-seats").index = 2;
+            Root.Q<DropdownField>("omc-options-speed").index = 0;
+            Root.Q<Toggle>("omc-options-reveal").value = true;
+            Assert.That(screen.IsProgressPaused, Is.True);
+            Submit("omc-help"); Submit("omc-fold"); Submit("omc-passive");
+            Assert.That(table.Human.Read().SessionVersion, Is.EqualTo(version));
+            AssertButtonHit("omc-cancel-options"); AssertButtonHit("omc-apply-options"); AssertLayout();
+            Submit("omc-cancel-options"); Assert.That(changes, Is.Zero);
+            Assert.That(screen.IsProgressPaused, Is.False);
+            Submit("omc-options");
+            Assert.That(Root.Q<DropdownField>("omc-options-seats").index, Is.Zero, "Discard un-applied choices.");
+            Root.Q<DropdownField>("omc-options-seats").index = 2;
+            Root.Q<DropdownField>("omc-options-speed").index = 0;
+            Root.Q<Toggle>("omc-options-reveal").value = true;
+            Submit("omc-apply-options"); Submit("omc-apply-options");
+            Assert.That(changes, Is.EqualTo(1)); Assert.That(received.SeatCount, Is.EqualTo(4));
+            Assert.That(received.OpponentDelaySeconds, Is.EqualTo(0.25f));
+            Assert.That(received.RevealPolicy, Is.EqualTo(HoldemRevealPolicy.PauseAfterCommunityReveal));
+            Assert.That(original.SeatCount, Is.EqualTo(2));
+            Assert.That(table.Human.Read().SessionVersion, Is.EqualTo(version));
+        }
+
+        [UnityTest]
+        public IEnumerator FailedOptionsReplacementKeepsTheOriginalGameAndModal()
+        {
+            screen.Dispose();
+            screen = new HoldemTableScreen(Root, table.Human, () => restarts++, 100,
+                Resources.Load<Font>("Fonts/NanumGothic-Regular"),
+                options: new HoldemTableOptions(2, 0.7f, HoldemRevealPolicy.Automatic),
+                configureTable: _ => throw new InvalidOperationException("test failure"));
+            var before = table.Human.Read();
+            Submit("omc-options");
+            LogAssert.Expect(LogType.Error, "Holdem options were not applied (InvalidOperationException).");
+            Submit("omc-apply-options"); yield return null;
+            Assert.That(screen.IsProgressPaused, Is.True);
+            Assert.That(table.Human.Read().HandId, Is.EqualTo(before.HandId));
+            Assert.That(table.Human.Read().SessionVersion, Is.EqualTo(before.SessionVersion));
+            Submit("omc-cancel-options"); Assert.That(screen.IsProgressPaused, Is.False);
+        }
+
+        [UnityTest]
         public IEnumerator NonTieShowdownShowsTheActualWinnerAndEvaluatedHand()
         {
             screen.Dispose();
@@ -340,6 +412,8 @@ namespace Poker.Runtime.Tests
                 double enabledAt = Time.realtimeSinceStartupAsDouble + 2;
                 while (!savedDoc.rootVisualElement.Q<Button>("omc-reset").enabledInHierarchy && Time.realtimeSinceStartupAsDouble < enabledAt) yield return null;
                 Submit(savedDoc.rootVisualElement.Q<Button>("omc-reset")); yield return null;
+                Assert.That(bootstrap.Progress.Street, Is.EqualTo(HoldemStreet.Complete));
+                Submit(savedDoc.rootVisualElement.Q<Button>("omc-confirm-reset"));
                 Assert.That(bootstrap.Progress.HandNumber, Is.EqualTo(1));
                 Assert.That(bootstrap.Progress.Version, Is.EqualTo(1));
                 Assert.That(bootstrap.Progress.Street, Is.EqualTo(HoldemStreet.Preflop));
@@ -349,7 +423,227 @@ namespace Poker.Runtime.Tests
             finally { if (savedDoc != null && savedDoc.panelSettings != null) savedDoc.panelSettings.targetTexture = null; }
             yield return UnityEngine.SceneManagement.SceneManager.UnloadSceneAsync(saved);
         }
+
+        [UnityTest]
+        public IEnumerator SavedSceneOptionsPauseNpcsAndReplaceTableWithoutMutatingSettingsAsset()
+        {
+            screen.Dispose(); go.SetActive(false);
+            var saved = UnityEditor.SceneManagement.EditorSceneManager.LoadSceneInPlayMode(
+                "Assets/Poker/Samples/HoldemTable.unity",
+                new UnityEngine.SceneManagement.LoadSceneParameters(UnityEngine.SceneManagement.LoadSceneMode.Additive));
+            UIDocument doc = null;
+            try
+            {
+                for (int i = 0; i < 5; i++) yield return null;
+                doc = saved.GetRootGameObjects().SelectMany(g => g.GetComponentsInChildren<UIDocument>()).Single();
+                doc.panelSettings.targetTexture = texture;
+                var bootstrap = doc.GetComponent<HoldemTableBootstrap>();
+                var root = doc.rootVisualElement;
+                int assetSeats = bootstrap.Settings.seatCount;
+                float assetDelay = bootstrap.Settings.opponentDelaySeconds;
+                var assetReveal = bootstrap.Settings.revealPolicy;
+                Submit(root.Q<Button>("omc-options"));
+                long version = bootstrap.Progress.Version;
+                yield return new WaitForSecondsRealtime(1f);
+                Assert.That(bootstrap.Progress.Version, Is.EqualTo(version), "Options pause NPC progress.");
+                root.Q<DropdownField>("omc-options-seats").index = 1;
+                root.Q<DropdownField>("omc-options-speed").index = 0;
+                root.Q<Toggle>("omc-options-reveal").value = true;
+                Button oldApply = root.Q<Button>("omc-apply-options");
+                Submit(oldApply); Submit(oldApply);
+                Assert.That(bootstrap.Progress.SeatCount, Is.EqualTo(3));
+                Assert.That(bootstrap.Progress.HandNumber, Is.EqualTo(1));
+                Assert.That(bootstrap.Progress.Version, Is.EqualTo(1));
+                Assert.That(bootstrap.ActiveOptions.OpponentDelaySeconds, Is.EqualTo(0.25f));
+                Assert.That(bootstrap.ActiveOptions.RevealPolicy, Is.EqualTo(HoldemRevealPolicy.PauseAfterCommunityReveal));
+                Assert.That(bootstrap.Settings.seatCount, Is.EqualTo(assetSeats));
+                Assert.That(bootstrap.Settings.opponentDelaySeconds, Is.EqualTo(assetDelay));
+                Assert.That(bootstrap.Settings.revealPolicy, Is.EqualTo(assetReveal));
+                Submit(root.Q<Button>("omc-reset"));
+                version = bootstrap.Progress.Version;
+                yield return new WaitForSecondsRealtime(0.4f);
+                Assert.That(bootstrap.Progress.Version, Is.EqualTo(version), "Confirmation pauses NPC progress.");
+                Submit(root.Q<Button>("omc-cancel-reset"));
+                double deadline = Time.realtimeSinceStartupAsDouble + 10;
+                while (bootstrap.Progress.Street == HoldemStreet.Preflop && Time.realtimeSinceStartupAsDouble < deadline)
+                {
+                    var passiveButton = root.Q<Button>("omc-passive");
+                    if (passiveButton.enabledInHierarchy && passiveButton.style.display.value != DisplayStyle.None) Submit(passiveButton);
+                    yield return null;
+                }
+                Assert.That(bootstrap.Progress.Street, Is.EqualTo(HoldemStreet.Flop));
+                for (int i = 0; i < 3; i++) yield return null;
+                Assert.That(root.Q<Button>("omc-continue-reveal").style.display.value, Is.EqualTo(DisplayStyle.Flex));
+                version = bootstrap.Progress.Version;
+                yield return new WaitForSecondsRealtime(0.4f);
+                Assert.That(bootstrap.Progress.Version, Is.EqualTo(version));
+                Submit(root.Q<Button>("omc-continue-reveal"));
+                Assert.That(bootstrap.Progress.Version, Is.EqualTo(version + 1));
+            }
+            finally { if (doc != null && doc.panelSettings != null) doc.panelSettings.targetTexture = null; }
+            yield return UnityEngine.SceneManagement.SceneManager.UnloadSceneAsync(saved);
+        }
 #endif
+        [UnityTest]
+        public IEnumerator RevealWindowsHideBettingAndResumeOnceThroughHostButton()
+        {
+            screen.Dispose();
+            table = new HoldemLocalTable(new HoldemConfig(100, 1, 2, HoldemRevealPolicy.PauseAfterCommunityReveal),
+                4, new FixedRandom(), new FixedRandom(), new PassivePolicy(), HoldemOddChipRule.ClockwiseFromButton);
+            screen = new HoldemTableScreen(Root, table.Human, () => restarts++, 100,
+                Resources.Load<Font>("Fonts/NanumGothic-Regular"), resumeReveal: table.ResumeAfterReveal);
+            yield return Resize(new Vector2Int(960, 640));
+            int windows = 0;
+            double deadline = Time.realtimeSinceStartupAsDouble + 15;
+            while (table.Human.Read().Result == null && Time.realtimeSinceStartupAsDouble < deadline)
+            {
+                var v = table.Human.Read();
+                if (v.IsRevealPending)
+                {
+                    windows++;
+                    Assert.That((int)v.Street, Is.EqualTo(windows));
+                    yield return WaitEnabled("omc-continue-reveal");
+                    Assert.That(Root.Q<Button>("omc-passive").resolvedStyle.display, Is.EqualTo(DisplayStyle.None));
+                    Assert.That(Root.Query(className: "hidden").ToList().Count, Is.EqualTo(6));
+                    Assert.That(Root.Q<Label>(className: "omc-prompt").text, Does.Contain("공개"));
+                    AssertLayout(); AssertButtonHit("omc-continue-reveal");
+                    long version = v.SessionVersion;
+                    Submit("omc-help"); Submit("omc-continue-reveal");
+                    Assert.That(table.Human.Read().SessionVersion, Is.EqualTo(version));
+                    Submit("omc-close-help");
+                    Submit("omc-continue-reveal"); Submit("omc-continue-reveal");
+                    Assert.That(table.Human.Read().SessionVersion, Is.EqualTo(version + 1));
+                    Capture("reveal-" + windows);
+                }
+                else if (v.LegalActions == null) { table.AdvanceNpc(); screen.Render(); }
+                else if (Root.Q<Button>("omc-passive").enabledInHierarchy) Submit("omc-passive");
+                yield return null;
+            }
+            Assert.That(windows, Is.EqualTo(3));
+            Assert.That(table.Human.Read().Result.Kind, Is.EqualTo(HoldemResultKind.Showdown));
+            Assert.That(Root.Query(className: "face-card").ToList().Count, Is.EqualTo(13));
+        }
+
+        [UnityTest]
+        public IEnumerator AccusationPassButtonsCompleteThreeWindowsWithoutFoldingPlayer()
+        {
+            UseAccusationTable();
+            yield return Resize(new Vector2Int(960, 640));
+            var windows = new System.Collections.Generic.HashSet<Guid>();
+            double deadline = Time.realtimeSinceStartupAsDouble + 15;
+            while (table.Human.Read().Result == null && Time.realtimeSinceStartupAsDouble < deadline)
+            {
+                var v = table.Human.Read(); var intake = v.Accusations;
+                if (intake != null)
+                {
+                    windows.Add(intake.WindowId);
+                    if (intake.Phase == HoldemAccusationPhase.Collecting)
+                    {
+                        if (!intake.HasResponded)
+                        {
+                            yield return WaitEnabled("omc-pass-accusation");
+                            AssertButtonHit("omc-pass-accusation"); AssertButtonHit("omc-accuse"); AssertLayout();
+                            long version = table.Human.Read().SessionVersion;
+                            Submit("omc-pass-accusation"); Submit("omc-pass-accusation");
+                            Assert.That(table.Human.Read().SessionVersion, Is.EqualTo(version + 1));
+                            Assert.That(table.Human.Read().GetSeat(v.ViewerSeat).Status, Is.EqualTo(HoldemSeatStatus.Active));
+                        }
+                        table.AdvanceAccusationResponses(); screen.Render();
+                    }
+                    else
+                    {
+                        Assert.That(intake.Phase, Is.EqualTo(HoldemAccusationPhase.ClosedWithoutClaims));
+                        yield return WaitEnabled("omc-continue-reveal"); Submit("omc-continue-reveal");
+                    }
+                }
+                else if (v.LegalActions == null) { table.AdvanceNpc(); screen.Render(); }
+                else if (Root.Q<Button>("omc-passive").enabledInHierarchy) Submit("omc-passive");
+                yield return null;
+            }
+            Assert.That(windows.Count, Is.EqualTo(3));
+            Assert.That(table.Human.Read().Result.Kind, Is.EqualTo(HoldemResultKind.Showdown));
+            Assert.That(table.Human.Read().GetSeatAt(0).RevealedBestCardCount, Is.EqualTo(5));
+            Assert.That(Root.Q("omc-accusations").resolvedStyle.display, Is.EqualTo(DisplayStyle.None));
+            AssertLayout();
+        }
+
+        [UnityTest]
+        public IEnumerator AccusationUiSelectsTargetAndWaitsForHostWithoutExposingHands()
+        {
+            UseAccusationTable();
+            yield return ReachAccusationWindow();
+            yield return Resize(new Vector2Int(960, 640));
+            yield return WaitEnabled("omc-accuse");
+            Root.Q<DropdownField>("omc-accusation-target").index = 2;
+            var before = table.Human.Read();
+            Submit("omc-help"); Submit("omc-accuse");
+            Assert.That(table.Human.Read().SessionVersion, Is.EqualTo(before.SessionVersion));
+            Submit("omc-close-help");
+            AssertButtonHit("omc-accuse"); AssertLayout();
+            Submit("omc-accuse"); Submit("omc-accuse");
+            Assert.That(table.Human.Read().SessionVersion, Is.EqualTo(before.SessionVersion + 1));
+            Assert.That(table.Human.Read().Accusations.OwnTarget, Is.EqualTo(new SeatId(4)));
+            while (table.AdvanceAccusationResponses()) { screen.Render(); yield return null; }
+            screen.Render(); yield return null;
+            Assert.That(table.Human.Read().Accusations.Phase, Is.EqualTo(HoldemAccusationPhase.AwaitingVerdicts));
+            Assert.That(Root.Q("omc-accusations").resolvedStyle.display, Is.EqualTo(DisplayStyle.None));
+            Assert.That(Root.Q<Button>("omc-continue-reveal").resolvedStyle.display, Is.EqualTo(DisplayStyle.None));
+            Assert.That(Root.Q<Label>(className: "omc-prompt").text, Does.Contain("판정을 기다리고"));
+            Assert.That(Root.Query(className: "hidden").ToList().Count, Is.EqualTo(6));
+            var v = table.Human.Read();
+            var claim = table.GetPendingAccusations().Single();
+            Assert.That(claim.Target, Is.EqualTo(new SeatId(4)));
+            Assert.That(table.ProcessAccusationHostCommand(HoldemAccusationHostCommand.Verdict(v.SessionId, v.HandId,
+                v.Accusations.WindowId, Guid.NewGuid(), v.SessionVersion, v.Street, claim.ClaimId, false)).Accepted, Is.True);
+            screen.Render(); yield return null;
+            Assert.That(Root.Q<Label>(className: "omc-prompt").text, Does.Contain("결과 처리를 기다리고"));
+            Assert.That(table.Human.Read().OwnStack, Is.EqualTo(before.OwnStack));
+            Assert.That(table.Human.Read().PotAmount, Is.EqualTo(before.PotAmount));
+            Assert.That(table.Human.Read().Result, Is.Null);
+            Assert.That(table.AdvanceNpc(), Is.False);
+        }
+
+        [UnityTest]
+        public IEnumerator AccusationWaitingCanBeAbandonedOnlyAfterConfirmation()
+        {
+            UseAccusationTable();
+            yield return ReachAccusationWindow();
+            yield return WaitEnabled("omc-accuse"); Submit("omc-accuse");
+            while (table.AdvanceAccusationResponses()) { screen.Render(); yield return null; }
+            screen.Dispose();
+            screen = new HoldemTableScreen(Root, table.Human, () => restarts++, 100,
+                Resources.Load<Font>("Fonts/NanumGothic-Regular"), () => restarts++, table.ResumeAfterReveal);
+            var before = table.Human.Read();
+            Submit("omc-reset"); Submit("omc-continue-reveal"); Submit("omc-cancel-reset");
+            Assert.That(restarts, Is.Zero);
+            Assert.That(table.Human.Read().SessionVersion, Is.EqualTo(before.SessionVersion));
+            Assert.That(table.Human.Read().Accusations.Phase, Is.EqualTo(HoldemAccusationPhase.AwaitingVerdicts));
+            Submit("omc-reset"); Submit("omc-confirm-reset"); Submit("omc-confirm-reset");
+            Assert.That(restarts, Is.EqualTo(1));
+            Assert.That(table.Human.Read().Result, Is.Null);
+        }
+
+        private void UseAccusationTable()
+        {
+            screen.Dispose();
+            table = new HoldemLocalTable(new HoldemConfig(100, 1, 2, HoldemRevealPolicy.PauseAfterCommunityReveal,
+                HoldemAccusationMode.CollectLatestChoiceUntilHostCloses), 4,
+                new FixedRandom(), new FixedRandom(), new PassivePolicy(), HoldemOddChipRule.ClockwiseFromButton);
+            screen = new HoldemTableScreen(Root, table.Human, () => restarts++, 100,
+                Resources.Load<Font>("Fonts/NanumGothic-Regular"), resumeReveal: table.ResumeAfterReveal);
+        }
+        private IEnumerator ReachAccusationWindow()
+        {
+            double deadline = Time.realtimeSinceStartupAsDouble + 5;
+            while (table.Human.Read().Accusations == null && Time.realtimeSinceStartupAsDouble < deadline)
+            {
+                if (table.Human.Read().LegalActions == null) { table.AdvanceNpc(); screen.Render(); }
+                else if (Root.Q<Button>("omc-passive").enabledInHierarchy) Submit("omc-passive");
+                yield return null;
+            }
+            Assert.That(table.Human.Read().Accusations, Is.Not.Null);
+        }
+
         private IEnumerator CompletePassive()
         {
             double deadline = Time.realtimeSinceStartupAsDouble + 10;

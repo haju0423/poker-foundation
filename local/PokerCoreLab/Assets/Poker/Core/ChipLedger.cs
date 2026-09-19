@@ -102,6 +102,22 @@ namespace Poker.Foundation
             return WithBalance(index, checked(current.Stack + amount), checked(current.Committed - amount));
         }
 
+        /// <summary>
+        /// Authority bookkeeping: transfer an exact amount between uncommitted stacks, leaving the pot untouched.
+        /// Does not choose a fine or a shortfall/elimination rule. Insufficient funds reject the whole movement.
+        /// </summary>
+        public ChipLedger TransferStack(SeatId from, SeatId to, long amount)
+        {
+            if (amount <= 0) throw new ArgumentOutOfRangeException(nameof(amount));
+            if (from == to) throw new ArgumentException("A transfer requires different seats.", nameof(to));
+            int source = FindSeatIndex(from), destination = FindSeatIndex(to);
+            if (seats[source].Stack < amount) throw new InvalidOperationException("The stack cannot cover the transfer.");
+            var next = (SeatChips[])seats.Clone();
+            next[source] = new SeatChips(from, checked(seats[source].Stack - amount), seats[source].Committed);
+            next[destination] = new SeatChips(to, checked(seats[destination].Stack + amount), seats[destination].Committed);
+            return new ChipLedger(next, TotalChips);
+        }
+
         // Settlement supplies a complete award vector in ledger order; no public arbitrary-payout/reset API.
         internal ChipLedger Distribute(long[] payouts)
         {

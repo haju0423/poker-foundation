@@ -21,7 +21,19 @@ namespace Poker.Foundation
         CommandConflict,
         SettlementRuleRequired,
         SettlementNotPending,
-        InvalidSettlementRule
+        InvalidSettlementRule,
+        RevealPending,
+        RevealNotPending,
+        WrongRevealWindow,
+        AccusationNotEnabled,
+        AccusationWindowClosed,
+        AccusationWindowNotClosed,
+        AccusationResponsesPending,
+        InvalidAccusationTarget,
+        UnknownAccusation,
+        AccusationVerdictRecorded,
+        AccusationVerdictsPending,
+        AccusationConsequencesPending
     }
 
     public sealed class HoldemStartCommand
@@ -108,13 +120,21 @@ namespace Poker.Foundation
     }
 
     /// <summary>Single-authority two-to-four-seat session with a persistent clockwise roster.</summary>
-    public sealed class HoldemSession
+    public sealed partial class HoldemSession
     {
         private sealed class AcceptedCommand
         {
             public AcceptedCommand(HoldemCommand command, HoldemReceipt receipt)
             { Command = command; Receipt = receipt; }
             public HoldemCommand Command { get; }
+            public HoldemReceipt Receipt { get; }
+        }
+
+        private sealed class AcceptedReveal
+        {
+            public AcceptedReveal(HoldemRevealCommand command, HoldemReceipt receipt)
+            { Command = command; Receipt = receipt; }
+            public HoldemRevealCommand Command { get; }
             public HoldemReceipt Receipt { get; }
         }
 
@@ -138,6 +158,7 @@ namespace Poker.Foundation
         private readonly SeatId initialButton;
         private readonly HoldemOddChipRule oddChipRule;
         private readonly Dictionary<Guid, AcceptedCommand> accepted = new Dictionary<Guid, AcceptedCommand>();
+        private readonly Dictionary<Guid, AcceptedReveal> acceptedReveals = new Dictionary<Guid, AcceptedReveal>();
         private readonly HashSet<Guid> usedCommandIds = new HashSet<Guid>();
         private HashSet<Guid> startedHandIds = new HashSet<Guid>();
         private ChipLedger settledLedger;
@@ -256,9 +277,11 @@ namespace Poker.Foundation
                 SeatId button = ResolveNextButton();
                 HoldemHand candidate = HoldemHand.Begin(command.HandId, settledLedger,
                     roster, button, config, random, oddChipRule);
+                HoldemAccusationWindow nextWindow = AccusationsFor(candidate);
                 var receipt = new HoldemReceipt(SessionId, command.HandId, command.CommandId,
                     null, nextVersion, HoldemCommandError.None);
                 currentHand = candidate;
+                accusations = nextWindow;
                 Version = nextVersion;
                 HandNumber = nextHandNumber;
                 startedHandIds = nextStartedHandIds;
@@ -267,6 +290,8 @@ namespace Poker.Foundation
                 currentSettlementCommand = null;
                 currentSettlementReceipt = null;
                 accepted.Clear();
+                acceptedReveals.Clear();
+                acceptedAccusations.Clear();
                 usedCommandIds.Add(command.CommandId);
                 if (candidate.IsComplete) settledLedger = MergeSettled(candidate);
                 return receipt;
@@ -298,6 +323,7 @@ namespace Poker.Foundation
                 return Reject(command, HoldemCommandError.CommandConflict);
             if (command.ExpectedVersion != Version) return Reject(command, HoldemCommandError.VersionMismatch);
             if (currentHand.IsSettlementPending) return Reject(command, HoldemCommandError.SettlementRuleRequired);
+            if (currentHand.IsRevealPending) return Reject(command, HoldemCommandError.RevealPending);
             if (currentHand.IsComplete) return Reject(command, HoldemCommandError.HandComplete);
             if (currentHand.CurrentSeat != command.Seat) return Reject(command, HoldemCommandError.WrongTurn);
             if (!currentHand.CurrentBetting.GetLegalActions().Allows(command.Action))
@@ -308,13 +334,56 @@ namespace Poker.Foundation
             {
                 long nextVersion = checked(Version + 1);
                 HoldemHand candidate = currentHand.Apply(command.Seat, command.Action);
+                HoldemAccusationWindow nextWindow = AccusationsFor(candidate);
                 var receipt = new HoldemReceipt(SessionId, command.HandId, command.CommandId,
                     command.Seat, nextVersion, HoldemCommandError.None);
                 currentHand = candidate;
+                accusations = nextWindow;
                 Version = nextVersion;
                 accepted.Add(command.CommandId, new AcceptedCommand(command, receipt));
                 usedCommandIds.Add(command.CommandId);
                 if (candidate.IsComplete) settledLedger = MergeSettled(candidate);
+                return receipt;
+            }
+            finally { processing = false; }
+        }
+
+        /// <summary>
+        /// Trusted host only: the transport must authorize this operation before calling it.
+        /// Carries no accusation verdict or payout; normal showdown settlement stays in the hand core.
+        /// </summary>
+        public HoldemReceipt ResumeAfterReveal(HoldemRevealCommand command)
+        {
+            if (command == null) throw new ArgumentNullException(nameof(command));
+            if (command.SessionId != SessionId) return Reject(command, HoldemCommandError.WrongSession);
+            if (currentHand == null) return Reject(command, HoldemCommandError.NotStarted);
+            if (command.HandId != currentHand.HandId) return Reject(command, HoldemCommandError.WrongHand);
+            if (processing) return Reject(command, HoldemCommandError.Busy);
+            if (acceptedReveals.TryGetValue(command.CommandId, out AcceptedReveal previous))
+                return previous.Command.HasSamePayload(command) ? previous.Receipt
+                    : Reject(command, HoldemCommandError.CommandConflict);
+            if (usedCommandIds.Contains(command.CommandId)) return Reject(command, HoldemCommandError.CommandConflict);
+            if (command.ExpectedVersion != Version) return Reject(command, HoldemCommandError.VersionMismatch);
+            if (!currentHand.IsRevealPending) return Reject(command, HoldemCommandError.RevealNotPending);
+            if (command.Street != currentHand.Street) return Reject(command, HoldemCommandError.WrongRevealWindow);
+            HoldemCommandError accusationError = AccusationResumeError();
+            if (accusationError != HoldemCommandError.None) return Reject(command, accusationError);
+
+            processing = true;
+            try
+            {
+                long nextVersion = checked(Version + 1);
+                HoldemHand candidate = currentHand.ResumeAfterReveal(command.Street);
+                ChipLedger candidateLedger = candidate.IsComplete ? MergeSettled(candidate) : settledLedger;
+                HoldemAccusationWindow nextWindow = AccusationsFor(candidate);
+                var receipt = new HoldemReceipt(SessionId, command.HandId, command.CommandId,
+                    null, nextVersion, HoldemCommandError.None);
+                currentHand = candidate;
+                accusations = nextWindow;
+                settledLedger = candidateLedger;
+                Version = nextVersion;
+                acceptedReveals.Add(command.CommandId, new AcceptedReveal(command, receipt));
+                usedCommandIds.Add(command.CommandId);
                 return receipt;
             }
             finally { processing = false; }
@@ -369,7 +438,7 @@ namespace Poker.Foundation
                 compatibilityBusted = settledLedger.GetChips(roster[0]).Stack == 0 ? roster[0] : roster[1];
             return new HoldemSnapshot(SessionId, Version, HandNumber, ButtonPolicy,
                 CanContinue, IsOver, SessionWinnerSeat, compatibilityBusted,
-                roster, settledLedger, currentHand, viewer);
+                roster, settledLedger, currentHand, viewer, accusations?.ForViewer(viewer));
         }
 
         private SeatId ResolveNextButton()
@@ -417,6 +486,9 @@ namespace Poker.Foundation
 
         private HoldemReceipt Reject(SettlementCommand command, HoldemCommandError error)
             => new HoldemReceipt(SessionId, command.HandId, command.CommandId, null, null, error);
+
+        private HoldemReceipt Reject(HoldemRevealCommand command, HoldemCommandError error)
+            => new HoldemReceipt(command.SessionId, command.HandId, command.CommandId, null, null, error);
 
         private static ChipLedger CreateEqualLedger(HoldemConfig config,
             IReadOnlyList<SeatId> seatsInTableOrder)

@@ -21,7 +21,7 @@ namespace Poker.Foundation
             Card[] ownedBoard, Deck ownedDeck, HoldemStreet street,
             BettingRound betting, HoldemOddChipRule oddChipRule,
             HoldemSettlement result, SeatId[] ownedPendingSeats,
-            HoldemEvaluatedHand[] ownedPendingHands)
+            HoldemEvaluatedHand[] ownedPendingHands, bool isRevealPending = false)
         {
             HandId = handId;
             Version = version;
@@ -40,6 +40,7 @@ namespace Poker.Foundation
             Result = result;
             pendingSeats = ownedPendingSeats;
             pendingHands = ownedPendingHands;
+            IsRevealPending = isRevealPending;
         }
 
         public Guid HandId { get; }
@@ -56,7 +57,8 @@ namespace Poker.Foundation
             : pendingHands != null ? HoldemSettlementState.AwaitingOddChipPriority
             : HoldemSettlementState.None;
         public bool IsSettlementPending => SettlementState == HoldemSettlementState.AwaitingOddChipPriority;
-        public SeatId? CurrentSeat => SettlementState == HoldemSettlementState.None
+        public bool IsRevealPending { get; }
+        public SeatId? CurrentSeat => SettlementState == HoldemSettlementState.None && !IsRevealPending
             ? CurrentBetting.CurrentSeat : (SeatId?)null;
         public bool IsComplete => Result != null;
         public HoldemSettlement Result { get; }
@@ -161,6 +163,7 @@ namespace Poker.Foundation
         {
             if (action == null) throw new ArgumentNullException(nameof(action));
             RequireSeat(seat);
+            if (IsRevealPending) throw new InvalidOperationException("The community-card reveal must be resolved first.");
             if (SettlementState != HoldemSettlementState.None)
                 throw new InvalidOperationException(IsComplete ? "The hand is complete." : "Settlement priority is required.");
             if (CurrentSeat != seat) throw new InvalidOperationException("This seat cannot act now.");
@@ -177,6 +180,17 @@ namespace Poker.Foundation
                 ? candidate.AdvanceAfterCompletedBetting(action.Kind == BettingActionKind.Fold ? seat : (SeatId?)null,
                     nextVersion)
                 : candidate;
+        }
+
+        /// <summary>Host closes exactly one reveal window. All-in runouts still stop at the next reveal.</summary>
+        public HoldemHand ResumeAfterReveal(HoldemStreet expectedStreet)
+        {
+            if (!IsRevealPending) throw new InvalidOperationException("No community-card reveal is pending.");
+            if (expectedStreet != Street) throw new InvalidOperationException("The reveal window has changed.");
+            long nextVersion = checked(Version + 1);
+            var resumed = NewState(nextVersion, foldedSeats, board, deck.Copy(),
+                Street, CurrentBetting, null, null, null);
+            return CurrentBetting.IsComplete ? resumed.AdvanceAfterCompletedBetting(null, nextVersion) : resumed;
         }
 
         /// <summary>Trusted host resolution; players never supply a payout order.</summary>
@@ -252,6 +266,9 @@ namespace Poker.Foundation
                 SeatId[] postflopOrder = HoldemSeatOrder.RotateAfter(seats, ButtonSeat, seat => !Contains(foldedSeats, seat));
                 BettingRound nextBetting = BettingRound.BeginUnopened(completedBetting.Ledger,
                     postflopOrder, Config.BigBlind);
+                if (Config.RevealPolicy == HoldemRevealPolicy.PauseAfterCommunityReveal)
+                    return NewState(version, foldedSeats, nextBoard, nextDeck,
+                        nextStreet, nextBetting, null, null, null, true);
                 if (!nextBetting.IsComplete)
                     return NewState(version, foldedSeats, nextBoard, nextDeck,
                         nextStreet, nextBetting, null, null, null);
@@ -291,10 +308,10 @@ namespace Poker.Foundation
         private HoldemHand NewState(long version, SeatId[] nextFolded, Card[] nextBoard,
             Deck nextDeck, HoldemStreet street, BettingRound betting,
             HoldemSettlement result, SeatId[] nextPendingSeats,
-            HoldemEvaluatedHand[] nextPendingHands)
+            HoldemEvaluatedHand[] nextPendingHands, bool isRevealPending = false)
             => new HoldemHand(HandId, version, Config, seats, holeCards, nextFolded,
                 ButtonSeat, SmallBlindSeat, BigBlindSeat, nextBoard, nextDeck, street,
-                betting, oddChipRule, result, nextPendingSeats, nextPendingHands);
+                betting, oddChipRule, result, nextPendingSeats, nextPendingHands, isRevealPending);
 
         private SeatId[] LiveSeats()
         {

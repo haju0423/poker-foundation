@@ -56,6 +56,9 @@ Button:disabled { opacity: 0.35; }
 .omc-help-card { width: 510px; padding: 24px; background-color: #1b3034; border-radius: 12px; border-width: 1px; border-color: #a3956d; }
 .omc-help-title { font-size: 24px; -unity-font-style: bold; margin-bottom: 16px; }
 .omc-help-copy { white-space: normal; font-size: 16px; margin-bottom: 16px; }
+.omc-option-field { margin-bottom: 16px; min-height: 30px; font-size: 16px; }
+.omc-option-field > .unity-base-field__label { min-width: 110px; color: #f1eddf; }
+.omc-option-field .unity-base-popup-field__input { background-color: #273d3e; color: #eee9d9; }
 .omc-root.compact { padding: 8px 18px; }
 .compact .omc-header { height: 46px; }
 .compact .omc-title { font-size: 24px; }

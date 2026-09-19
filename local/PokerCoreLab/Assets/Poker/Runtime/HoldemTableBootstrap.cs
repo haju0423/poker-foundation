@@ -15,6 +15,7 @@ namespace Poker.Runtime
         private HoldemTableScreen screen;
         private double nextOpponentAt, opponentDelay;
         private long observedVersion;
+        public HoldemTableOptions ActiveOptions { get; private set; }
         public HoldemTableSettings Settings { get => settings; set => settings = value; }
         public HoldemProgressInfo Progress
         {
@@ -27,15 +28,21 @@ namespace Poker.Runtime
         }
         private void OnEnable()
         {
-            if (!UnityEngine.Application.isBatchMode) Screen.SetResolution(1200, 800, FullScreenMode.Windowed);
+            if (!UnityEngine.Application.isBatchMode && Screen.fullScreenMode != FullScreenMode.Windowed)
+                Screen.fullScreenMode = FullScreenMode.Windowed;
             StartNewSession();
         }
         private void StartNewSession() => StartNewSession(false);
-        private void StartNewSession(bool abandonActive)
+        private void StartNewSession(bool abandonActive) => ReplaceSession(abandonActive, ActiveOptions);
+        private void ConfigureSession(HoldemTableOptions options) => ReplaceSession(true, options);
+        private void ReplaceSession(bool abandonActive, HoldemTableOptions options)
         {
             if (table != null && table.Human.Read().Result == null && !abandonActive) return;
             if (settings == null) throw new InvalidOperationException("Assign the Hold'em table settings.");
-            HoldemConfig config = settings.CreateConfig();
+            HoldemConfig original = settings.CreateConfig();
+            options = options ?? new HoldemTableOptions(settings.seatCount, settings.opponentDelaySeconds, settings.revealPolicy);
+            HoldemConfig config = new HoldemConfig(original.StartingStack, original.SmallBlind, original.BigBlind,
+                options.RevealPolicy, original.AccusationMode);
             var doc = GetComponent<UIDocument>();
             Font font = Resources.Load<Font>("Fonts/NanumGothic-Regular");
             if (doc == null || doc.panelSettings == null || font == null || Resources.Load<StyleSheet>("HoldemTable") == null)
@@ -47,18 +54,29 @@ namespace Poker.Runtime
             var surface = new VisualElement();
             try
             {
-                candidate = new HoldemLocalTable(config, settings.seatCount, nextDeck, nextOpponent);
+                candidate = new HoldemLocalTable(config, options.SeatCount, nextDeck, nextOpponent);
                 // Construct and render off-tree first. A failed replacement must leave the old table visible.
                 candidateScreen = new HoldemTableScreen(surface, candidate.Human, StartNewSession, config.StartingStack, font,
-                    () => StartNewSession(true));
+                    () => StartNewSession(true), candidate.ResumeAfterReveal, options,
+                    original.AccusationMode == HoldemAccusationMode.Disabled ? ConfigureSession : (Action<HoldemTableOptions>)null);
             }
             catch { candidateScreen?.Dispose(); nextDeck.Dispose(); nextOpponent.Dispose(); throw; }
             screen?.Dispose(); deckRandom?.Dispose(); opponentRandom?.Dispose();
             doc.rootVisualElement.Clear(); doc.rootVisualElement.Add(surface);
             table = candidate; deckRandom = nextDeck; opponentRandom = nextOpponent;
-            opponentDelay = settings.opponentDelaySeconds;
+            ActiveOptions = options;
+            opponentDelay = options.OpponentDelaySeconds;
             screen = candidateScreen;
             Schedule();
+#if !UNITY_EDITOR
+            // Explicit headless startup check for the packaged player; never used during normal play.
+            if (UnityEngine.Application.isBatchMode
+                && Array.IndexOf(Environment.GetCommandLineArgs(), "-omc-check-startup") >= 0)
+            {
+                Debug.Log("OMC_STARTUP_OK seats=" + options.SeatCount + " hand=" + table.Human.Read().HandNumber);
+                UnityEngine.Application.Quit(0);
+            }
+#endif
         }
         private void Update()
         {
@@ -67,6 +85,13 @@ namespace Poker.Runtime
             {
                 var view = table.Human.Read();
                 if (view.SessionVersion != observedVersion) Schedule();
+                if (view.Accusations != null && view.Accusations.Phase == HoldemAccusationPhase.Collecting)
+                {
+                    if (Time.realtimeSinceStartupAsDouble < nextOpponentAt) return;
+                    if (table.AdvanceAccusationResponses()) screen.Render();
+                    Schedule();
+                    return;
+                }
                 if (!view.CurrentSeat.HasValue || view.CurrentSeat == view.ViewerSeat || Time.realtimeSinceStartupAsDouble < nextOpponentAt) return;
                 if (table.AdvanceNpc()) screen.Render();
                 Schedule();

@@ -17,26 +17,48 @@ namespace Poker.Runtime
         private readonly IHoldemPlayerPort port;
         private readonly Action restart;
         private readonly Action abandonSession;
+        private readonly Func<HoldemRevealCommand, HoldemReceipt> resumeReveal;
+        private readonly IHoldemAccusationPlayerPort accusationPort;
+        private readonly HoldemTableOptions options;
+        private readonly Action<HoldemTableOptions> configureTable;
+        private readonly List<float> speedChoices = new List<float> { 0.25f, 0.7f, 1.25f };
+        private readonly List<SeatId> accusationTargets = new List<SeatId>();
+        private Guid targetWindow;
         private readonly long startingStack;
         private readonly List<Label> stages = new List<Label>();
         private HoldemSnapshot view;
         private readonly List<SeatWidgets> seatWidgets = new List<SeatWidgets>();
         private Label counter, pot, result, last, prompt, error, hint;
         private VisualElement board, amountRow, actionRow, help, resetConfirmation;
-        private Button fold, passive, aggressive, next, reset, retry, resolve;
+        private Button fold, passive, aggressive, next, reset, retry, resolve, continueReveal;
+        private VisualElement accusationRow;
+        private DropdownField accusationTarget;
+        private Button accuse, passAccusation;
         private TextField amount;
-        private bool disposed, paused, helpOpen;
+        private bool disposed, paused, helpOpen, resetOpen, optionsOpen;
+        private VisualElement optionsDialog;
+        private DropdownField seatChoice, speedChoice;
+        private Toggle revealChoice;
+        private Label optionsError;
         private double lockedUntil;
         private IVisualElementScheduledItem unlock;
-        public bool IsProgressPaused => paused || helpOpen || disposed;
+        public bool IsProgressPaused => paused || ModalOpen || disposed;
+        private bool ModalOpen => helpOpen || resetOpen || optionsOpen;
         public VisualElement Root => root;
 
-        public HoldemTableScreen(VisualElement root, IHoldemPlayerPort port, Action restart, long startingStack, Font font, Action abandonSession = null)
+        public HoldemTableScreen(VisualElement root, IHoldemPlayerPort port, Action restart, long startingStack, Font font,
+            Action abandonSession = null, Func<HoldemRevealCommand, HoldemReceipt> resumeReveal = null,
+            HoldemTableOptions options = null, Action<HoldemTableOptions> configureTable = null)
         {
             this.root = root ?? throw new ArgumentNullException(nameof(root));
             this.port = port ?? throw new ArgumentNullException(nameof(port));
+            accusationPort = port as IHoldemAccusationPlayerPort;
             this.restart = restart ?? throw new ArgumentNullException(nameof(restart));
             this.abandonSession = abandonSession;
+            this.resumeReveal = resumeReveal;
+            this.options = options;
+            this.configureTable = configureTable;
+            if (configureTable != null && options == null) throw new ArgumentNullException(nameof(options));
             this.startingStack = startingStack;
             StyleSheet sheet = Resources.Load<StyleSheet>("HoldemTable");
             if (sheet == null || font == null) throw new InvalidOperationException("Hold'em UI resources are missing.");
@@ -54,7 +76,11 @@ namespace Poker.Runtime
             title.Add(Text("텍사스 홀덤 · 포커 기본형", "omc-subtitle"));
             var right = Box("omc-header-right", header);
             counter = Text("", "omc-counter"); right.Add(counter);
-            right.Add(Click("도움말", "omc-help", () => { helpOpen = true; Show(help, true); }));
+            if (configureTable != null) right.Add(Click("게임 설정", "omc-options", OpenOptions));
+            right.Add(Click("도움말", "omc-help", () => {
+                if (disposed || ModalOpen) return;
+                helpOpen = true; Show(help, true);
+            }));
             var steps = Box("omc-stages", root);
             foreach (string name in new[] { "프리플랍", "플랍", "턴", "리버" })
             { var label = Text(name, "omc-stage"); stages.Add(label); steps.Add(label); }
@@ -78,6 +104,13 @@ namespace Poker.Runtime
             seatWidgets.Add(CreateSeat(table, initial.ViewerSeat, true, false));
             var controls = Box("omc-controls", root);
             prompt = Text("", "omc-prompt"); controls.Add(prompt);
+            accusationRow = Box("omc-actions", controls); accusationRow.name = "omc-accusations";
+            accusationTarget = new DropdownField { name = "omc-accusation-target" };
+            accusationTarget.style.minWidth = 130;
+            accusationRow.Add(accusationTarget);
+            accuse = Click("고발", "omc-accuse", () => ChooseAccusation(true));
+            passAccusation = Click("넘기기", "omc-pass-accusation", () => ChooseAccusation(false));
+            accusationRow.Add(accuse); accusationRow.Add(passAccusation);
             amountRow = Box("omc-amounts", controls);
             amountRow.Add(Text("이번 베팅 총액", "omc-caption"));
             amount = new TextField { name = "omc-target", maxLength = 19 };
@@ -102,7 +135,14 @@ namespace Poker.Runtime
                 if (CanInteract() && view.IsSettlementPending) Run(() => port.ResolvePendingSettlement(view.SessionVersion));
             });
             resolve.tooltip = KoreanPokerText.SplitRemainderHelp;
-            foreach (var button in new[] { fold, passive, aggressive, next, reset, retry, resolve }) actionRow.Add(button);
+            continueReveal = Click("계속", "omc-continue-reveal", () =>
+            {
+                if (CanInteract() && view.IsRevealPending && resumeReveal != null)
+                    Run(() => resumeReveal(new HoldemRevealCommand(view.SessionId, view.HandId,
+                        Guid.NewGuid(), view.SessionVersion, view.Street)));
+            });
+            continueReveal.AddToClassList("omc-primary");
+            foreach (var button in new[] { fold, passive, aggressive, next, reset, retry, resolve, continueReveal }) actionRow.Add(button);
             error = Text("", "omc-error"); controls.Add(error);
             help = Box("omc-overlay", root);
             var helpCard = Box("omc-help-card", help);
@@ -114,14 +154,72 @@ namespace Poker.Runtime
             var resetCard = Box("omc-help-card", resetConfirmation);
             resetCard.Add(Text("새 게임을 시작할까요?", "omc-help-title"));
             resetCard.Add(Text("현재 판과 보유 칩을 초기화해요. 진행 중이던 판으로 돌아올 수는 없어요.", "omc-help-copy"));
-            resetCard.Add(Click("현재 판 유지", "omc-cancel-reset", () => Show(resetConfirmation, false)));
+            resetCard.Add(Click("현재 판 유지", "omc-cancel-reset", () => {
+                if (disposed || !resetOpen) return;
+                resetOpen = false; Show(resetConfirmation, false);
+            }));
             resetCard.Add(Click("초기화하고 새 게임", "omc-confirm-reset", () => {
-                if (!paused || abandonSession == null) return;
+                if (disposed || !resetOpen || abandonSession == null) return;
+                resetOpen = false;
                 Show(resetConfirmation, false);
                 try { abandonSession(); }
                 catch (Exception e) { PauseProgress(); Debug.LogError("Holdem recovery start failed (" + e.GetType().Name + ")."); }
             }));
             Show(resetConfirmation, false);
+            if (configureTable != null) BuildOptions();
+        }
+
+        private void BuildOptions()
+        {
+            optionsDialog = Box("omc-overlay", root); optionsDialog.name = "omc-options-dialog";
+            var card = Box("omc-help-card", optionsDialog);
+            card.Add(Text("게임 설정", "omc-help-title"));
+            seatChoice = new DropdownField("참가 인원", new List<string> { "2인 · 나 + 상대 1명", "3인 · 나 + 상대 2명", "4인 · 나 + 상대 3명" }, 0)
+                { name = "omc-options-seats" };
+            var labels = new List<string> { "빠르게", "보통", "천천히" };
+            if (!speedChoices.Contains(options.OpponentDelaySeconds))
+            {
+                speedChoices.Add(options.OpponentDelaySeconds);
+                labels.Add("현재 간격 (" + options.OpponentDelaySeconds.ToString("0.##", CultureInfo.InvariantCulture) + "초)");
+            }
+            speedChoice = new DropdownField("상대 진행", labels, 0) { name = "omc-options-speed" };
+            revealChoice = new Toggle("공용 카드 확인 후 진행") { name = "omc-options-reveal" };
+            revealChoice.tooltip = "플랍·턴·리버가 공개되면 멈춰요. 계속을 누르면 다음 베팅으로 이어집니다.";
+            foreach (var field in new VisualElement[] { seatChoice, speedChoice, revealChoice })
+            { field.AddToClassList("omc-option-field"); card.Add(field); }
+            card.Add(Text("적용하면 현재 판과 칩을 초기화하고 새 게임을 시작해요.", "omc-help-copy"));
+            optionsError = Text("", "omc-error"); card.Add(optionsError);
+            card.Add(Click("취소", "omc-cancel-options", () => {
+                if (disposed || !optionsOpen) return;
+                optionsOpen = false; Show(optionsDialog, false);
+            }));
+            card.Add(Click("적용하고 새 게임", "omc-apply-options", ApplyOptions));
+            Show(optionsDialog, false);
+        }
+
+        private void OpenOptions()
+        {
+            if (disposed || ModalOpen || configureTable == null || Time.realtimeSinceStartupAsDouble < lockedUntil) return;
+            seatChoice.index = options.SeatCount - 2;
+            speedChoice.index = speedChoices.IndexOf(options.OpponentDelaySeconds);
+            revealChoice.SetValueWithoutNotify(options.RevealPolicy == HoldemRevealPolicy.PauseAfterCommunityReveal);
+            optionsError.text = "";
+            optionsOpen = true; Show(optionsDialog, true);
+        }
+
+        private void ApplyOptions()
+        {
+            if (disposed || !optionsOpen || configureTable == null) return;
+            if (seatChoice.index < 0 || seatChoice.index > 2 || speedChoice.index < 0 || speedChoice.index >= speedChoices.Count) return;
+            var requested = new HoldemTableOptions(seatChoice.index + 2, speedChoices[speedChoice.index],
+                revealChoice.value ? HoldemRevealPolicy.PauseAfterCommunityReveal : HoldemRevealPolicy.Automatic);
+            // Keep the old table and modal until replacement succeeds.
+            try { configureTable(requested); optionsOpen = false; Show(optionsDialog, false); }
+            catch (Exception e)
+            {
+                optionsError.text = "새 게임을 시작하지 못했어요. 현재 판은 그대로 유지돼요.";
+                Debug.LogError("Holdem options were not applied (" + e.GetType().Name + ").");
+            }
         }
 
         public void Render()
@@ -167,17 +265,22 @@ namespace Poker.Runtime
             Show(next, complete && view.CanContinue && !paused);
             next.text = own.Status == HoldemSeatStatus.Busted ? "다음 판 관전" : "다음 판";
             Show(resolve, pending && !paused); resolve.SetEnabled(!paused && Time.realtimeSinceStartupAsDouble >= lockedUntil);
+            Show(continueReveal, view.IsRevealPending && resumeReveal != null && !paused
+                && (view.Accusations == null || view.Accusations.Phase == HoldemAccusationPhase.ClosedWithoutClaims));
+            continueReveal.SetEnabled(!paused && Time.realtimeSinceStartupAsDouble >= lockedUntil);
             next.SetEnabled(!paused && Time.realtimeSinceStartupAsDouble >= lockedUntil);
-            Show(reset, complete && !paused); reset.SetEnabled(!paused && Time.realtimeSinceStartupAsDouble >= lockedUntil);
+            Show(reset, (complete || abandonSession != null) && !paused); reset.SetEnabled(!paused && Time.realtimeSinceStartupAsDouble >= lockedUntil);
             reset.tooltip = "모든 참가자의 칩을 " + KoreanPokerText.Chips(startingStack) + "으로 초기화합니다.";
             Show(retry, paused);
             prompt.text = pending ? KoreanPokerText.SplitRemainderPrompt
+                : view.IsRevealPending ? RevealPrompt()
                 : complete ? (view.IsOver ? (view.OwnStack > 0 ? "모든 칩을 가져왔어요!" : "테이블 승부가 끝났어요.")
                     : view.OwnStack == 0 ? "칩을 모두 잃었어요. 다음 판은 관전할 수 있어요." : "다음 판에도 칩은 그대로 이어져요.")
                 : own.Status == HoldemSeatStatus.Busted ? "관전 중 · " + ActorText()
                 : own.Status == HoldemSeatStatus.Folded ? "이번 판은 폴드했어요 · " + ActorText()
                 : legal == null ? ActorText() : "내 차례예요.";
             if (changed) error.text = "";
+            RenderAccusations();
             UpdateAmount();
             if (paused) ApplyPaused();
         }
@@ -201,9 +304,48 @@ namespace Poker.Runtime
             }
         }
 
+        private void RenderAccusations()
+        {
+            var state = view.Accusations;
+            bool visible = state != null && state.CanRespond && accusationPort != null && !paused;
+            Show(accusationRow, visible);
+            bool enabled = visible && Time.realtimeSinceStartupAsDouble >= lockedUntil;
+            accusationRow.SetEnabled(enabled);
+            if (!visible) return;
+            if (targetWindow != state.WindowId)
+            {
+                targetWindow = state.WindowId; accusationTargets.Clear();
+                var names = new List<string>();
+                for (int i = 0; i < state.TargetCount; i++)
+                {
+                    var target = state.GetTargetAt(i); accusationTargets.Add(target); names.Add(SeatName(target));
+                }
+                accusationTarget.choices = names;
+                if (names.Count > 0) accusationTarget.index = 0;
+            }
+            accuse.SetEnabled(enabled && accusationTargets.Count > 0);
+            accuse.tooltip = "접수가 끝나기 전에는 선택을 바꿀 수 있어요.";
+            passAccusation.tooltip = "고발하지 않고 넘겨요. 포커에서 폴드하는 것은 아니에요.";
+        }
+
+        private void ChooseAccusation(bool claim)
+        {
+            if (!CanInteract() || accusationPort == null || view.Accusations == null || !view.Accusations.CanRespond) return;
+            SeatId? target = null;
+            if (claim)
+            {
+                int index = accusationTarget.index;
+                if (index < 0 || index >= accusationTargets.Count) return;
+                target = accusationTargets[index];
+            }
+            var command = new HoldemAccusationChoiceCommand(view.SessionId, view.HandId, view.Accusations.WindowId,
+                Guid.NewGuid(), view.SessionVersion, view.Street, view.ViewerSeat, target);
+            Run(() => accusationPort.SubmitAccusationChoice(command));
+        }
+
         private void SetTarget(int mode)
         {
-            if (disposed || paused || view.LegalActions == null) return;
+            if (!CanInteract() || view.LegalActions == null) return;
             var legal = view.LegalActions;
             if (!legal.MinimumAggressiveTarget.HasValue) return;
             decimal target = mode == 0 ? legal.MinimumAggressiveTarget.Value : mode == 2 ? legal.MaximumAggressiveTarget.Value
@@ -228,12 +370,14 @@ namespace Poker.Runtime
         }
         private void Restart()
         {
-            if (!disposed && paused && abandonSession != null) { Show(resetConfirmation, true); return; }
+            if (disposed || ModalOpen) return;
+            if (abandonSession != null && (paused || CanInteract()))
+            { resetOpen = true; Show(resetConfirmation, true); return; }
             if (!CanInteract() || view.Result == null) return;
             try { restart(); }
             catch (Exception e) { PauseProgress(); Debug.LogError("Holdem restart failed (" + e.GetType().Name + ")."); }
         }
-        private bool CanInteract() => !disposed && !paused && !helpOpen && Time.realtimeSinceStartupAsDouble >= lockedUntil;
+        private bool CanInteract() => !disposed && !paused && !ModalOpen && Time.realtimeSinceStartupAsDouble >= lockedUntil;
         private void Run(Func<HoldemReceipt> action)
         {
             try
@@ -252,8 +396,9 @@ namespace Poker.Runtime
         }
         private void ApplyPaused()
         {
+            Show(accusationRow, false);
             Show(amountRow, false);
-            foreach (var button in new[] { fold, passive, aggressive, next, reset, resolve }) { button.SetEnabled(false); Show(button, false); }
+            foreach (var button in new[] { fold, passive, aggressive, next, reset, resolve, continueReveal }) { button.SetEnabled(false); Show(button, false); }
             if (abandonSession != null) { Show(reset, true); reset.SetEnabled(true); }
             Show(retry, true); prompt.text = "진행을 잠시 멈췄어요.";
             error.text = "현재 판은 유지돼요. 다시 확인해 주세요.";
@@ -315,6 +460,24 @@ namespace Poker.Runtime
         }
         private string SeatName(SeatId seat) => seat == view.ViewerSeat ? "나" : view.SeatCount == 2 ? "상대" : "상대 " + view.GetSeat(seat).TableIndex;
         private string ActorText() => view.CurrentSeat.HasValue ? SeatName(view.CurrentSeat.Value) + " 차례예요." : "진행을 확인하고 있어요.";
+        private string RevealPrompt()
+        {
+            string street = view.Street == HoldemStreet.Flop ? "플랍" : view.Street == HoldemStreet.Turn ? "턴" : "리버";
+            var state = view.Accusations;
+            if (state != null && state.Phase == HoldemAccusationPhase.AwaitingVerdicts)
+                return "고발 접수 완료 · 판정을 기다리고 있어요.";
+            if (state != null && state.Phase == HoldemAccusationPhase.AwaitingConsequences)
+                return "판정 완료 · 결과 처리를 기다리고 있어요.";
+            if (state != null && state.Phase == HoldemAccusationPhase.Collecting)
+            {
+                string choice = !state.CanRespond ? "다른 참가자의 선택을 기다리고 있어요."
+                    : !state.HasResponded ? "고발할 상대를 고르거나 넘겨 주세요."
+                    : state.OwnTarget.HasValue ? SeatName(state.OwnTarget.Value) + " 고발 선택 · 접수 중"
+                    : "넘기기 선택 · 접수 중";
+                return street + " 공개 · " + choice + " (" + state.ResponseCount + "/" + state.EligibleCount + ")";
+            }
+            return street + " 공개 · " + (resumeReveal != null ? "카드를 확인하고 계속을 눌러 주세요." : "진행 대기 중이에요.");
+        }
         private string ResultText()
         {
             var r = view.Result;
