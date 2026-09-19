@@ -31,7 +31,7 @@ Unity 6000.3.23f1에서 [프로젝트 폴더](local/PokerCoreLab)를 열고,
 
 - `Core`: 카드·족보·베팅·팟 정산·게임 진행
 - `Application`: 로컬 테이블과 NPC 행동
-- `Presentation`: 한글 문구와 표시 형식
+- `Presentation`: 문구
 - `Runtime`: 게임 화면과 입력 처리
 - `Editor`: 장면 구성과 Windows·Mac 빌드
 - `Tests`: 포커 규칙과 화면 동작 테스트
