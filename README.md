@@ -4,8 +4,8 @@ NPC 1~3명과 플레이하는 텍사스 홀덤 게임입니다. 기본은 4인 �
 
 ## 다운로드
 
-- [Windows](https://github.com/haju0423/poker-foundation/releases/download/2026.09.21-holdem/OneMoreCard-Windows.zip)
-- [Mac](https://github.com/haju0423/poker-foundation/releases/download/2026.09.21-holdem/OneMoreCard-macOS.zip)
+- [Windows](https://github.com/haju0423/poker-foundation/releases/download/2026.09.21-holdem-history/OneMoreCard-Windows.zip)
+- [Mac](https://github.com/haju0423/poker-foundation/releases/download/2026.09.21-holdem-history/OneMoreCard-macOS.zip)
 
 Windows는 압축을 모두 풀고 `One More Card.exe`를 실행합니다. 같은 폴더의 다른 파일도 함께 있어야 합니다.
 Mac은 압축을 풀고 `One More Card.app`을 실행합니다.
@@ -21,6 +21,7 @@ Mac은 압축을 풀고 `One More Card.app`을 실행합니다.
 - **새 게임 설정**에서 참가 인원과 상대 행동 속도를 바꿀 수 있습니다. 설정을 적용하면 새 게임을 시작합니다.
 - **공용 카드 공개 후 잠시 멈추기**를 켜면 플랍·턴·리버 공개 때 멈춥니다. 카드를 보고 **계속**을 누르면 됩니다.
 - 결과 화면의 **분배 내역**에서 각 팟을 누가 받았는지 확인하고, 쇼다운에서 공개된 패의 숫자를 비교할 수 있습니다.
+- 상단의 **이번 판 기록**에서 단계별 행동과 낸 칩, 돌려받은 칩을 확인할 수 있습니다. 다음 판을 시작하면 기록이 새로 쌓입니다.
 
 ## 프로젝트 실행
 
@@ -32,7 +33,7 @@ Unity 6000.3.23f1에서 [프로젝트 폴더](local/PokerCoreLab)를 열고,
 `Assets/Poker` 아래에 기능별로 나뉘어 있습니다.
 
 - `Core`: 카드·족보·베팅·팟 정산·게임 진행
-- `Application`: 로컬 테이블과 NPC 행동
+- `Application`: 로컬 테이블·NPC 행동·판 기록
 - `Presentation`: 문구
 - `Runtime`: 게임 화면과 입력 처리
 - `Editor`: 장면 구성과 Windows·Mac 빌드
