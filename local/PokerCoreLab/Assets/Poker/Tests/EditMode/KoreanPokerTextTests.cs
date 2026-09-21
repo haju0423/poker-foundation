@@ -123,11 +123,21 @@ namespace Poker.Foundation.Tests
         [Test]
         public void RemainderActionExplainsThePayoutAndItsScope()
         {
-            Assert.That(KoreanPokerText.SplitRemainderLabel, Is.EqualTo("남은 칩 나누기"));
-            Assert.That(KoreanPokerText.SplitRemainderHelp, Does.Contain("동률인 승자 중 버튼 다음 자리"));
+            Assert.That(KoreanPokerText.SplitRemainderLabel, Is.EqualTo("나머지 칩 배분 확인"));
+            Assert.That(KoreanPokerText.SplitRemainderHelp, Does.Contain("동률인 승자 중 딜러 다음 자리"));
             Assert.That(KoreanPokerText.SplitRemainderHelp, Does.Contain("이번 판에만 적용"));
-            Assert.That(KoreanPokerText.SplitRemainderPrompt, Does.Contain("정산이 끝나요"));
+            Assert.That(KoreanPokerText.SplitRemainderPrompt, Does.Contain("모든 팟을 정산"));
         }
+
+        [TestCase(HoldemCommandError.WrongTurn, "다른 참가자의 차례")]
+        [TestCase(HoldemCommandError.IllegalAction, "가능한 행동과 금액")]
+        [TestCase(HoldemCommandError.VersionMismatch, "진행 상태가 바뀌었어요")]
+        [TestCase(HoldemCommandError.RevealPending, "‘계속’")]
+        [TestCase(HoldemCommandError.SettlementRuleRequired, "배분 순서")]
+        [TestCase(HoldemCommandError.WrongSession, "현재 테이블에 연결하지 못했어요")]
+        [TestCase(HoldemCommandError.AccusationConsequencesPending, "고발 결과를 처리")]
+        public void RejectedActionsExplainTheRelevantNextStep(HoldemCommandError reason, string expected) =>
+            Assert.That(KoreanPokerText.CommandErrorMessage(reason), Does.Contain(expected));
 
         [TestCase(Rank.Ace, "A")]
         [TestCase(Rank.King, "K")]

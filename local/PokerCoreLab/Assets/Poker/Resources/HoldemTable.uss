@@ -19,6 +19,8 @@
 .omc-player .omc-card { width: 84px; height: 105px; }
 .omc-middle { align-items: center; flex-shrink: 0; }
 .omc-pot { font-size: 26px; color: #efd197; -unity-font-style: bold; margin-bottom: 5px; }
+.omc-pot-row { flex-direction: row; align-items: center; justify-content: center; }
+.omc-pot-row Button { height: 27px; min-width: 70px; font-size: 12px; margin-left: 12px; padding: 2px 9px; }
 .omc-board { height: 112px; }
 .omc-card { width: 76px; height: 100px; margin: 0 6px; border-radius: 8px; padding: 6px 8px; background-color: #f3efdf; border-width: 2px; border-color: #d2d6c5; color: #1d3540; justify-content: space-between; align-items: center; flex-shrink: 0; }
 .omc-card.red { color: #ad4642; }
@@ -32,7 +34,7 @@
 .omc-card.empty { background-color: #1b463e; border-color: #3b6255; justify-content: center; }
 .omc-placeholder { color: #6f9785; font-size: 12px; }
 .omc-result { font-size: 18px; color: #f6d697; min-height: 23px; margin-top: 4px; }
-.omc-last { font-size: 13px; color: #b1c7b9; min-height: 20px; }
+.omc-last { font-size: 13px; color: #b1c7b9; min-height: 20px; white-space: normal; -unity-text-align: middle-center; max-width: 770px; }
 .omc-hand-label { font-size: 12px; color: #c6d4bc; margin-top: 3px; -unity-text-align: middle-center; }
 .omc-controls { height: 155px; flex-shrink: 0; align-items: center; }
 .omc-root.complete .omc-controls { height: 110px; }
@@ -48,6 +50,7 @@ Button:disabled { opacity: 0.35; }
 .omc-amounts { height: 39px; flex-shrink: 0; }
 .omc-amounts Button { height: 29px; min-width: 50px; font-size: 12px; padding: 3px 10px; }
 .omc-caption, .omc-amount-hint { font-size: 12px; color: #9cb2a7; margin: 0 8px; }
+.omc-amount-hint.invalid { color: #f0bb99; }
 .omc-target { width: 100px; height: 30px; font-size: 17px; }
 .omc-target .unity-text-element { color: #193b34; }
 .omc-target > .unity-text-field__input { padding-top: 0; padding-bottom: 0; }
@@ -56,6 +59,12 @@ Button:disabled { opacity: 0.35; }
 .omc-help-card { width: 510px; padding: 24px; background-color: #1b3034; border-radius: 12px; border-width: 1px; border-color: #a3956d; }
 .omc-help-title { font-size: 24px; -unity-font-style: bold; margin-bottom: 16px; }
 .omc-help-copy { white-space: normal; font-size: 16px; margin-bottom: 16px; }
+.omc-help-tabs { flex-direction: row; margin-bottom: 12px; }
+.omc-help-tabs Button { flex-grow: 1; padding-left: 8px; padding-right: 8px; }
+.omc-help-scroll { max-height: 310px; margin-bottom: 10px; }
+.omc-help-scroll .unity-scroll-view__content-container { flex-shrink: 1; }
+.omc-option-description { white-space: normal; font-size: 14px; color: #b1c7b9; margin-bottom: 20px; }
+.omc-reveal-option .unity-toggle__text { margin-left: 8px; color: #f1eddf; }
 .omc-option-field { margin-bottom: 16px; min-height: 30px; font-size: 16px; }
 .omc-option-field > .unity-base-field__label { min-width: 110px; color: #f1eddf; }
 .omc-option-field .unity-base-popup-field__input { background-color: #273d3e; color: #eee9d9; }
@@ -81,6 +90,8 @@ Button:disabled { opacity: 0.35; }
 .omc-root.complete.compact .omc-controls { height: 100px; }
 .compact .omc-prompt { font-size: 16px; min-height: 23px; }
 .compact .omc-actions Button { height: 38px; font-size: 15px; min-width: 126px; }
+.compact .omc-help-card { padding: 20px; }
+.compact .omc-help-scroll { max-height: 280px; }
 
 .omc-opponents { flex-direction: row; justify-content: space-around; width: 100%; flex-shrink: 0; }
 .multi-seat .omc-opponent { padding: 5px; border-width: 1px; border-color: rgba(90, 137, 110, 0.45); border-radius: 10px; margin: 0 4px; }

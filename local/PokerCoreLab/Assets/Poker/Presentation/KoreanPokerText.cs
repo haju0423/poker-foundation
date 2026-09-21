@@ -23,9 +23,32 @@ namespace Poker.Presentation
         public static string FoldHelp => "이번 판의 승부를 포기합니다. 이미 팟에 확정된 칩은 돌려받지 않습니다.";
         public static string CheckHelp => "추가로 칩을 내지 않고 차례를 넘깁니다.";
         public static string AllInHelp => "남은 칩을 모두 냅니다. 낸 칩에 해당하는 팟의 승부에는 계속 참여합니다.";
-        public static string SplitRemainderLabel => "남은 칩 나누기";
-        public static string SplitRemainderHelp => "동률인 승자 중 버튼 다음 자리부터 남는 칩을 지급해요. 이번 판에만 적용해요.";
-        public static string SplitRemainderPrompt => "남은 칩을 나누면 이번 판 정산이 끝나요.";
+        public static string SplitRemainderLabel => "나머지 칩 배분 확인";
+        public static string SplitRemainderHelp => "동률인 승자 중 딜러 다음 자리부터 시계 방향으로 나머지 칩을 지급해요. 이번 판에만 적용해요.";
+        public static string SplitRemainderPrompt => "배분 순서를 확인하면 이번 판의 모든 팟을 정산해요.";
+
+        public static string CommandErrorMessage(HoldemCommandError error)
+        {
+            switch (error)
+            {
+                case HoldemCommandError.WrongTurn: return "지금은 다른 참가자의 차례예요.";
+                case HoldemCommandError.IllegalAction: return "지금 가능한 행동과 금액을 다시 확인해 주세요.";
+                case HoldemCommandError.Busy: return "앞선 행동을 처리하고 있어요. 잠시 뒤 다시 눌러 주세요.";
+                case HoldemCommandError.HandComplete: return "이번 판은 끝났어요. 결과를 확인해 주세요.";
+                case HoldemCommandError.CannotContinue: return "테이블 승부가 끝났어요. 새 게임을 시작해 주세요.";
+                case HoldemCommandError.SettlementRuleRequired:
+                case HoldemCommandError.InvalidSettlementRule: return "나머지 칩의 배분 순서를 먼저 확인해 주세요.";
+                case HoldemCommandError.RevealPending: return "공용 카드를 확인한 뒤 ‘계속’을 눌러 주세요.";
+                case HoldemCommandError.AccusationResponsesPending: return "다른 참가자의 고발 선택을 기다리고 있어요.";
+                case HoldemCommandError.AccusationVerdictsPending: return "고발 판정을 기다리고 있어요.";
+                case HoldemCommandError.AccusationConsequencesPending: return "고발 결과를 처리하고 있어요.";
+                case HoldemCommandError.InvalidAccusationTarget: return "고발할 상대를 다시 골라 주세요.";
+                case HoldemCommandError.UnauthorizedSeat:
+                case HoldemCommandError.WrongSession:
+                case HoldemCommandError.NotStarted: return "현재 테이블에 연결하지 못했어요. 화면을 다시 확인해 주세요.";
+                default: return "진행 상태가 바뀌었어요. 화면을 확인하고 다시 선택해 주세요.";
+            }
+        }
 
         public static string Chips(long amount)
         {
