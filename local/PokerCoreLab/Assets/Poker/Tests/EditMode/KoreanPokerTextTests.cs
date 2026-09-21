@@ -65,6 +65,19 @@ namespace Poker.Foundation.Tests
             if (expected.StartsWith("로열")) Assert.That(value.Category, Is.EqualTo(HandCategory.StraightFlush));
         }
 
+        [TestCase("Ac Kd Qh 9s 7c", "하이 카드 · A·K·Q·9·7")]
+        [TestCase("Ac Ad Qh 9s 7c", "원페어 A · 남은 카드 Q·9·7")]
+        [TestCase("Ac Ad Qh Qs 7c", "투페어 A·Q · 남은 카드 7")]
+        [TestCase("Ac Ad Ah 9s 7c", "트리플 A · 남은 카드 9·7")]
+        [TestCase("Ac 2d 3h 4s 5c", "스트레이트 · 5까지 연속")]
+        [TestCase("Ac Kc Qc 9c 7c", "플러시 · A·K·Q·9·7")]
+        [TestCase("Ac Ad Ah 9s 9c", "풀하우스 · A 3장, 9 2장")]
+        [TestCase("Ac Ad Ah As 7c", "포카드 A · 남은 카드 7")]
+        [TestCase("9c Tc Jc Qc Kc", "스트레이트 플러시 · K까지 연속")]
+        [TestCase("Tc Jc Qc Kc Ac", "로열 스트레이트 플러시")]
+        public void HandDescriptionsExposeEvaluatedRanksInComparisonOrder(string cards, string expected) =>
+            Assert.That(KoreanPokerText.HandDescription(HandEvaluator.Evaluate(Parse(cards))), Is.EqualTo(expected));
+
         [TestCase(Suit.Clubs, Rank.Ten, "클로버 10")]
         [TestCase(Suit.Diamonds, Rank.Jack, "다이아 J")]
         [TestCase(Suit.Hearts, Rank.Queen, "하트 Q")]
@@ -106,6 +119,7 @@ namespace Poker.Foundation.Tests
             Assert.Throws<ArgumentOutOfRangeException>(() => KoreanPokerText.SettlementMessage((SettlementFailure)99));
             Assert.Throws<ArgumentOutOfRangeException>(() => KoreanPokerText.SettlementMessage(default));
             Assert.Throws<ArgumentException>(() => KoreanPokerText.HandName(default));
+            Assert.Throws<ArgumentException>(() => KoreanPokerText.HandDescription(default));
             Assert.Throws<ArgumentException>(() => KoreanPokerText.CardName(default));
             Assert.Throws<ArgumentException>(() => KoreanPokerText.RankLabel(default));
             Assert.Throws<ArgumentOutOfRangeException>(() => KoreanPokerText.PayoutLabel(0, true));

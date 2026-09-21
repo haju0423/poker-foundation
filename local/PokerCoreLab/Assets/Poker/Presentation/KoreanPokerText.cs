@@ -117,6 +117,48 @@ namespace Poker.Presentation
                 default: throw new ArgumentOutOfRangeException(nameof(value));
             }
         }
+
+        public static string HandDescription(HandValue value)
+        {
+            string name = HandName(value);
+            string first = RankText(value.GetTieBreaker(0));
+            switch (value.Category)
+            {
+                case HandCategory.OnePair:
+                case HandCategory.ThreeOfAKind:
+                case HandCategory.FourOfAKind:
+                    return name + " " + first + " · 남은 카드 " + TieRanks(value, 1);
+                case HandCategory.TwoPair:
+                    return name + " " + first + "·" + RankText(value.GetTieBreaker(1))
+                        + " · 남은 카드 " + RankText(value.GetTieBreaker(2));
+                case HandCategory.FullHouse:
+                    return name + " · " + first + " 3장, " + RankText(value.GetTieBreaker(1)) + " 2장";
+                case HandCategory.Straight:
+                case HandCategory.StraightFlush:
+                    return value.Category == HandCategory.StraightFlush && value.GetTieBreaker(0) == (int)Rank.Ace
+                        ? name : name + " · " + first + "까지 연속";
+                default: return name + " · " + TieRanks(value, 0);
+            }
+        }
+
+        private static string TieRanks(HandValue value, int start)
+        {
+            var ranks = new string[value.TieBreakerCount - start];
+            for (int i = start; i < value.TieBreakerCount; i++) ranks[i - start] = RankText(value.GetTieBreaker(i));
+            return string.Join("·", ranks);
+        }
+
+        private static string RankText(int rank)
+        {
+            switch ((Rank)rank)
+            {
+                case Rank.Ace: return "A";
+                case Rank.King: return "K";
+                case Rank.Queen: return "Q";
+                case Rank.Jack: return "J";
+                default: return rank.ToString(CultureInfo.InvariantCulture);
+            }
+        }
         public static string CardName(Card card)
         {
             if (!card.IsValid) throw new ArgumentException("A valid card is required.", nameof(card));
@@ -135,14 +177,7 @@ namespace Poker.Presentation
         public static string RankLabel(Card card)
         {
             if (!card.IsValid) throw new ArgumentException("A valid card is required.", nameof(card));
-            switch (card.Rank)
-            {
-                case Rank.Ace: return "A";
-                case Rank.King: return "K";
-                case Rank.Queen: return "Q";
-                case Rank.Jack: return "J";
-                default: return ((int)card.Rank).ToString(CultureInfo.InvariantCulture);
-            }
+            return RankText((int)card.Rank);
         }
 
         private static void RequirePositive(long amount)

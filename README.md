@@ -4,8 +4,8 @@ NPC 1~3명과 플레이하는 텍사스 홀덤 게임입니다. 기본은 4인 �
 
 ## 다운로드
 
-- [Windows](https://github.com/haju0423/poker-foundation/releases/download/2026.09.20-holdem/OneMoreCard-Windows.zip)
-- [Mac](https://github.com/haju0423/poker-foundation/releases/download/2026.09.20-holdem/OneMoreCard-macOS.zip)
+- [Windows](https://github.com/haju0423/poker-foundation/releases/download/2026.09.21-holdem/OneMoreCard-Windows.zip)
+- [Mac](https://github.com/haju0423/poker-foundation/releases/download/2026.09.21-holdem/OneMoreCard-macOS.zip)
 
 Windows는 압축을 모두 풀고 `One More Card.exe`를 실행합니다. 같은 폴더의 다른 파일도 함께 있어야 합니다.
 Mac은 압축을 풀고 `One More Card.app`을 실행합니다.
@@ -20,7 +20,7 @@ Mac은 압축을 풀고 `One More Card.app`을 실행합니다.
 - **다음 판**은 현재 보유 칩으로 이어지며 블라인드를 새로 냅니다. **새 게임**은 현재 판과 칩을 초기화합니다.
 - **새 게임 설정**에서 참가 인원과 상대 행동 속도를 바꿀 수 있습니다. 설정을 적용하면 새 게임을 시작합니다.
 - **공용 카드 공개 후 잠시 멈추기**를 켜면 플랍·턴·리버 공개 때 멈춥니다. 카드를 보고 **계속**을 누르면 됩니다.
-- 결과 화면의 **분배 내역**에서 각 팟을 누가 받았는지 확인할 수 있습니다.
+- 결과 화면의 **분배 내역**에서 각 팟을 누가 받았는지 확인하고, 쇼다운에서 공개된 패의 숫자를 비교할 수 있습니다.
 
 ## 프로젝트 실행
 

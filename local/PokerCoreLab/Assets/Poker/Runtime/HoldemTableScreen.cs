@@ -172,7 +172,8 @@ namespace Poker.Runtime
             potDetailsDialog = Box("omc-overlay", root); potDetailsDialog.name = "omc-pot-details-dialog";
             var detailsCard = Box("omc-help-card", potDetailsDialog);
             detailsCard.Add(Text("팟 분배 내역", "omc-help-title"));
-            var detailsScroll = new ScrollView(ScrollViewMode.Vertical); detailsScroll.AddToClassList("omc-help-scroll"); detailsCard.Add(detailsScroll);
+            var detailsScroll = new ScrollView(ScrollViewMode.Vertical) { name = "omc-pot-details-scroll" };
+            detailsScroll.AddToClassList("omc-help-scroll"); detailsCard.Add(detailsScroll);
             potDetailsCopy = Text("", "omc-help-copy"); potDetailsCopy.name = "omc-pot-details-copy"; detailsScroll.Add(potDetailsCopy);
             detailsCard.Add(Text("받은 칩에는 내가 팟에 낸 칩도 포함돼요. 순이익과는 달라요.", "omc-help-copy"));
             detailsCard.Add(Click("닫기", "omc-close-pot-details", () => { potDetailsOpen = false; Show(potDetailsDialog, false); }));
@@ -542,6 +543,19 @@ namespace Poker.Runtime
                     recipients.Add(SeatName(paid.Seat) + " " + KoreanPokerText.Chips(paid.Amount));
                 }
                 lines.Add(KoreanPokerText.PotName(i) + " · " + string.Join(", ", recipients));
+            }
+            if (view.Result.PotCount > 1)
+                lines.Add("\n사이드 팟은 그 금액까지 칩을 내고 남아 있는 참가자끼리만 겨뤄요.");
+            if (view.Result.Kind == HoldemResultKind.Showdown)
+            {
+                lines.Add("\n공개된 패");
+                for (int i = 0; i < view.SeatCount; i++)
+                {
+                    var seat = view.GetSeatAt(i);
+                    if (seat.RevealedHandValue.HasValue)
+                        lines.Add(SeatName(seat.Seat) + ": " + KoreanPokerText.HandDescription(seat.RevealedHandValue.Value));
+                }
+                lines.Add("\n같은 족보끼리는 표시된 숫자를 앞에서부터 차례대로 비교해요. 모두 같으면 동률이에요.");
             }
             return string.Join("\n", lines);
         }

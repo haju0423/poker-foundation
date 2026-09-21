@@ -102,6 +102,10 @@ namespace Poker.Runtime.Tests
             Assert.That(Root.Q<Label>(className: "omc-last").text, Does.Contain("공개하지"));
             yield return WaitEnabled("omc-reset");
             AssertLayout(); Capture("fold");
+            Submit("omc-pot-details"); yield return null;
+            Assert.That(Root.Q<Label>("omc-pot-details-copy").text, Does.Not.Contain("공개된 패"));
+            Assert.That(Root.Q("omc-opponent-cards").Query(className: "hidden").ToList().Count, Is.EqualTo(2));
+            Submit("omc-close-pot-details");
             Submit("omc-reset"); Assert.That(restarts, Is.EqualTo(1));
         }
 
@@ -397,13 +401,23 @@ namespace Poker.Runtime.Tests
             for (int i = 0; i < 3; i++) yield return null;
             Assert.That(screen.IsProgressPaused, Is.True);
             Assert.That(Root.Q("omc-pot-details-dialog").resolvedStyle.display, Is.EqualTo(DisplayStyle.Flex));
-            Assert.That(Root.Q<Label>("omc-pot-details-copy").text, Is.EqualTo("메인 팟 · 나 20칩\n사이드 팟 1 · 상대 1 8칩, 상대 2 7칩"));
+            string details = Root.Q<Label>("omc-pot-details-copy").text;
+            Assert.That(details, Does.StartWith("메인 팟 · 나 20칩\n사이드 팟 1 · 상대 1 8칩, 상대 2 7칩"));
+            Assert.That(details, Does.Contain("공개된 패"));
+            Assert.That(details, Does.Contain("나: 포카드 3 · 남은 카드 10"));
+            Assert.That(details, Does.Contain("상대 1: 스트레이트 · Q까지 연속"));
             var nextButton = Root.Q<Button>("omc-next");
             Assert.That(IsDescendant(Root.panel.Pick(nextButton.worldBound.center), nextButton), Is.False);
             Submit("omc-next"); Submit("omc-reset"); Submit("omc-help");
             Assert.That(port.Read().SessionVersion, Is.EqualTo(version + 1));
             Assert.That(restarts, Is.Zero);
             AssertButtonHit("omc-close-pot-details"); AssertLayout(); Capture("pot-details-960x640");
+            var scroll = Root.Q<ScrollView>("omc-pot-details-scroll");
+            scroll.scrollOffset = new Vector2(0, scroll.verticalScroller.highValue);
+            for (int i = 0; i < 3; i++) yield return null;
+            Assert.That(Root.Q<Label>("omc-pot-details-copy").worldBound.yMax,
+                Is.LessThanOrEqualTo(scroll.contentViewport.worldBound.yMax + 1), "The complete comparison explanation must be reachable.");
+            AssertButtonHit("omc-close-pot-details"); Capture("pot-details-scrolled");
             Submit("omc-close-pot-details"); yield return null;
             Assert.That(screen.IsProgressPaused, Is.False);
             Assert.That(Root.Q("omc-pot-details-dialog").resolvedStyle.display, Is.EqualTo(DisplayStyle.None));
