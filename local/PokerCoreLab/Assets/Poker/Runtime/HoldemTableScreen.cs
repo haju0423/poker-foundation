@@ -17,6 +17,7 @@ namespace Poker.Runtime
         public const string TermsHelpText = "딜러: 차례를 정하는 기준 자리예요.\nSB·BB: 판을 시작할 때 먼저 내는 작은·큰 블라인드예요.\n팟: 참가자들이 낸 칩을 모은 금액이에요.\n사이드 팟: 올인 금액을 넘겨 낸 참가자끼리 따로 겨루는 팟이에요.\n받은 칩: 팟에서 받은 금액이며, 순이익은 아니에요.\n\n족보 순서 (강한 순)\n스트레이트 플러시 > 포카드 > 풀하우스 > 플러시 > 스트레이트 > 트리플 > 투페어 > 원페어 > 하이 카드\n\nA는 보통 가장 높지만 A·2·3·4·5에서는 가장 낮아요. 무늬로 승패를 가르지 않아요.";
         private readonly VisualElement root;
         private readonly IHoldemPlayerPort port;
+        private readonly IHoldemHistoryPort historyPort;
         private readonly Action restart;
         private readonly Action abandonSession;
         private readonly Func<HoldemRevealCommand, HoldemReceipt> resumeReveal;
@@ -37,7 +38,10 @@ namespace Poker.Runtime
         private DropdownField accusationTarget;
         private Button accuse, passAccusation;
         private TextField amount;
-        private bool disposed, paused, helpOpen, resetOpen, optionsOpen, potDetailsOpen;
+        private bool disposed, paused, helpOpen, resetOpen, optionsOpen, potDetailsOpen, historyOpen;
+        private VisualElement historyDialog;
+        private Label historyCopy, historyTitle;
+        private ScrollView historyScroll;
         private VisualElement optionsDialog, potDetailsDialog;
         private Button potDetails;
         private readonly List<Button> helpTabs = new List<Button>();
@@ -48,7 +52,7 @@ namespace Poker.Runtime
         private double lockedUntil;
         private IVisualElementScheduledItem unlock;
         public bool IsProgressPaused => paused || ModalOpen || disposed;
-        private bool ModalOpen => helpOpen || resetOpen || optionsOpen || potDetailsOpen;
+        private bool ModalOpen => helpOpen || resetOpen || optionsOpen || potDetailsOpen || historyOpen;
         public VisualElement Root => root;
 
         public HoldemTableScreen(VisualElement root, IHoldemPlayerPort port, Action restart, long startingStack, Font font,
@@ -57,6 +61,7 @@ namespace Poker.Runtime
         {
             this.root = root ?? throw new ArgumentNullException(nameof(root));
             this.port = port ?? throw new ArgumentNullException(nameof(port));
+            historyPort = port as IHoldemHistoryPort;
             accusationPort = port as IHoldemAccusationPlayerPort;
             this.restart = restart ?? throw new ArgumentNullException(nameof(restart));
             this.abandonSession = abandonSession;
@@ -81,6 +86,7 @@ namespace Poker.Runtime
             title.Add(Text("텍사스 홀덤", "omc-subtitle"));
             var right = Box("omc-header-right", header);
             counter = Text("", "omc-counter"); right.Add(counter);
+            if (historyPort != null) right.Add(Click("이번 판 기록", "omc-history", OpenHistory));
             if (configureTable != null) right.Add(Click("새 게임 설정", "omc-options", OpenOptions));
             right.Add(Click("도움말", "omc-help", () => {
                 if (disposed || ModalOpen) return;
@@ -178,6 +184,7 @@ namespace Poker.Runtime
             detailsCard.Add(Text("받은 칩에는 내가 팟에 낸 칩도 포함돼요. 순이익과는 달라요.", "omc-help-copy"));
             detailsCard.Add(Click("닫기", "omc-close-pot-details", () => { potDetailsOpen = false; Show(potDetailsDialog, false); }));
             Show(potDetailsDialog, false);
+            if (historyPort != null) BuildHistory();
             resetConfirmation = Box("omc-overlay", root);
             var resetCard = Box("omc-help-card", resetConfirmation);
             resetCard.Add(Text("새 게임을 시작할까요?", "omc-help-title"));
@@ -202,6 +209,68 @@ namespace Poker.Runtime
             helpCopy.text = page == 0 ? HelpText : page == 1 ? ActionHelpText : TermsHelpText;
             helpScroll.scrollOffset = Vector2.zero;
             for (int i = 0; i < helpTabs.Count; i++) helpTabs[i].EnableInClassList("omc-primary", i == page);
+        }
+
+        private void BuildHistory()
+        {
+            historyDialog = Box("omc-overlay", root); historyDialog.name = "omc-history-dialog";
+            var card = Box("omc-help-card", historyDialog);
+            historyTitle = Text("이번 판 기록", "omc-help-title"); card.Add(historyTitle);
+            historyScroll = new ScrollView(ScrollViewMode.Vertical) { name = "omc-history-scroll" };
+            historyScroll.AddToClassList("omc-help-scroll"); card.Add(historyScroll);
+            historyCopy = Text("", "omc-help-copy"); historyCopy.name = "omc-history-copy"; historyScroll.Add(historyCopy);
+            card.Add(Click("닫기", "omc-close-history", () => { historyOpen = false; Show(historyDialog, false); }));
+            Show(historyDialog, false);
+        }
+
+        private void OpenHistory()
+        {
+            if (!CanInteract() || historyPort == null) return;
+            Render();
+            var history = historyPort.ReadHistory();
+            if (history == null || history.SessionId != view.SessionId || history.HandId != view.HandId) return;
+            historyTitle.text = history.HandNumber.ToString(CultureInfo.InvariantCulture) + "번째 판 기록";
+            var lines = new List<string>();
+            int lastStreet = view.BoardCount == 5 ? 3 : view.BoardCount == 4 ? 2 : view.BoardCount == 3 ? 1 : 0;
+            string[] names = { "프리플랍", "플랍", "턴", "리버" };
+            for (int stage = 0; stage <= lastStreet; stage++)
+            {
+                lines.Add(names[stage]);
+                int count = 0;
+                for (int i = 0; i < history.Count; i++)
+                {
+                    var entry = history.GetEntry(i);
+                    if ((int)entry.Street != stage) continue;
+                    string text = SeatName(entry.Seat) + " · ";
+                    if (entry.Kind == HoldemHistoryKind.UncalledReturn)
+                        text += "아무도 따라 내지 않은 " + KoreanPokerText.Chips(entry.Amount) + " 반환";
+                    else if (entry.Kind == HoldemHistoryKind.SmallBlind || entry.Kind == HoldemHistoryKind.BigBlind)
+                        text += (entry.Kind == HoldemHistoryKind.SmallBlind ? "SB " : "BB ") + KoreanPokerText.Chips(entry.Amount);
+                    else
+                    {
+                        text += KoreanPokerText.ActionName(entry.Action.Value);
+                        if (entry.Amount > 0)
+                            text += " · " + KoreanPokerText.AdditionalChips(entry.Amount) + " / 총 " + KoreanPokerText.Chips(entry.StreetTotal);
+                    }
+                    lines.Add(text + (entry.IsAllIn ? " (올인)" : "")); count++;
+                }
+                if (count == 0) lines.Add("베팅 기록 없음");
+                lines.Add("");
+            }
+            if (view.Result != null)
+            {
+                lines.Add(ResultText());
+                for (int i = 0; i < view.SeatCount; i++)
+                {
+                    var seat = view.GetSeatAt(i);
+                    if (seat.Awarded > 0) lines.Add(SeatName(seat.Seat) + " · 팟에서 " + KoreanPokerText.Chips(seat.Awarded) + " 받음");
+                }
+            }
+            else if (view.IsSettlementPending) lines.Add("팟 정산 대기 중");
+            lines.Add("\n총액은 해당 베팅 단계에서 낸 금액이에요.");
+            historyCopy.text = string.Join("\n", lines);
+            historyScroll.scrollOffset = Vector2.zero;
+            historyOpen = true; Show(historyDialog, true);
         }
 
         private void BuildOptions()

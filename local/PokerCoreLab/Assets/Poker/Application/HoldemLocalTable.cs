@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Poker.Foundation;
 
 namespace Poker.Application
@@ -35,6 +36,9 @@ namespace Poker.Application
         private readonly IRandomSource opponentRandom;
         private readonly SeatId humanSeat = new SeatId(1);
         private HoldemActionNotice lastAction;
+        private readonly HoldemConfig config;
+        private readonly List<HoldemHistoryEntry> history = new List<HoldemHistoryEntry>();
+        private HoldemHandHistory historySnapshot;
 
         public HoldemLocalTable(HoldemConfig config, IRandomSource deckRandom,
             IRandomSource opponentRandom, IHoldemOpponentPolicy opponent = null)
@@ -45,6 +49,7 @@ namespace Poker.Application
             HoldemOddChipRule oddChipRule = HoldemOddChipRule.RequireExplicitPriority)
         {
             if (seatCount < 2 || seatCount > 4) throw new ArgumentOutOfRangeException(nameof(seatCount));
+            this.config = config ?? throw new ArgumentNullException(nameof(config));
             this.opponentRandom = opponentRandom ?? throw new ArgumentNullException(nameof(opponentRandom));
             this.opponent = opponent ?? new HoldemNpcPolicy();
             var seats = new SeatId[seatCount];
@@ -53,11 +58,19 @@ namespace Poker.Application
             HoldemReceipt start = session.StartNextHand(Guid.NewGuid(), Guid.NewGuid(), 0);
             if (!start.Accepted) throw new InvalidOperationException("Could not start the local Hold'em table.");
             Human = new HumanPort(this);
+            StartHistory(null);
         }
         public IHoldemPlayerPort Human { get; }
 
         // A local-host control, deliberately absent from IHoldemPlayerPort.
-        public HoldemReceipt ResumeAfterReveal(HoldemRevealCommand command) => session.ResumeAfterReveal(command);
+        public HoldemReceipt ResumeAfterReveal(HoldemRevealCommand command)
+        {
+            var before = Human.Read();
+            var receipt = session.ResumeAfterReveal(command);
+            if (receipt.Accepted && receipt.Version > before.SessionVersion)
+                RecordReturns(before, Human.Read(), null, 0);
+            return receipt;
+        }
 
         public System.Collections.Generic.IReadOnlyList<HoldemAccusationClaim> GetPendingAccusations() => session.GetPendingAccusations();
         public System.Collections.Generic.IReadOnlyList<HoldemAccusationDecision> GetAccusationDecisions() => session.GetAccusationDecisions();
@@ -120,26 +133,88 @@ namespace Poker.Application
                     : command.Action.Kind == BettingActionKind.BetTo || command.Action.Kind == BettingActionKind.RaiseTo
                     ? command.Action.Target - before.OwnStreetContribution : 0;
                 lastAction = new HoldemActionNotice(authorizedSeat, command.Action, paid);
+                history.Add(new HoldemHistoryEntry(HoldemHistoryKind.Action, before.Street, authorizedSeat,
+                    command.Action.Kind, paid, before.OwnStreetContribution + paid, paid > 0 && paid == before.OwnStack));
+                RecordReturns(before, session.GetSnapshot(authorizedSeat), authorizedSeat, paid);
+                historySnapshot = null;
             }
             return receipt;
         }
 
-        private sealed class HumanPort : IHoldemPlayerPort, IHoldemAccusationPlayerPort
+        private void StartHistory(HoldemSnapshot previous)
+        {
+            history.Clear(); historySnapshot = null;
+            var current = Human.Read();
+            AddBlind(current.SmallBlindSeat, HoldemHistoryKind.SmallBlind, config.SmallBlind);
+            AddBlind(current.BigBlindSeat, HoldemHistoryKind.BigBlind, config.BigBlind);
+            for (int i = 0; i < current.SeatCount; i++)
+            {
+                var seat = current.GetSeatAt(i);
+                long initial = previous == null ? config.StartingStack : previous.GetSeat(seat.Seat).Stack;
+                long paid = seat.IsSmallBlind ? Math.Min(initial, config.SmallBlind)
+                    : seat.IsBigBlind ? Math.Min(initial, config.BigBlind) : 0;
+                AddReturn(HoldemStreet.Preflop, seat.Seat, seat.Stack - initial + paid - seat.Awarded);
+            }
+
+            void AddBlind(SeatId seat, HoldemHistoryKind kind, long blind)
+            {
+                long stack = previous == null ? config.StartingStack : previous.GetSeat(seat).Stack;
+                long paid = Math.Min(stack, blind);
+                history.Add(new HoldemHistoryEntry(kind, HoldemStreet.Preflop, seat, null, paid, paid, paid == stack));
+            }
+        }
+
+        private void RecordReturns(HoldemSnapshot before, HoldemSnapshot after, SeatId? actor, long paid)
+        {
+            // Poker-only transitions: subtract pot awards so they are never presented as returned bets.
+            for (int i = 0; i < after.SeatCount; i++)
+            {
+                var seat = after.GetSeatAt(i); var old = before.GetSeat(seat.Seat);
+                long returned = seat.Stack - old.Stack + (seat.Seat == actor ? paid : 0) - (seat.Awarded - old.Awarded);
+                AddReturn(before.Street, seat.Seat, returned);
+            }
+        }
+
+        private void AddReturn(HoldemStreet street, SeatId seat, long amount)
+        {
+            if (amount <= 0) return;
+            history.Add(new HoldemHistoryEntry(HoldemHistoryKind.UncalledReturn, street, seat, null, amount, 0, false));
+            historySnapshot = null;
+        }
+
+        private HoldemHandHistory ReadHistory()
+        {
+            if (historySnapshot == null)
+            {
+                var current = Human.Read();
+                historySnapshot = new HoldemHandHistory(current.SessionId, current.HandId, current.HandNumber, history);
+            }
+            return historySnapshot;
+        }
+
+        private sealed class HumanPort : IHoldemPlayerPort, IHoldemAccusationPlayerPort, IHoldemHistoryPort
         {
             private readonly HoldemLocalTable table;
             public HumanPort(HoldemLocalTable table) { this.table = table; }
             public HoldemSnapshot Read() => table.session.GetSnapshot(table.humanSeat);
             public HoldemActionNotice LastAction => table.lastAction;
+            public HoldemHandHistory ReadHistory() => table.ReadHistory();
             public HoldemReceipt Submit(HoldemCommand command) => table.Apply(table.humanSeat, command);
             public HoldemReceipt SubmitAccusationChoice(HoldemAccusationChoiceCommand command)
                 => table.session.SubmitAccusationChoice(table.humanSeat, command);
             // The local host exposes one explicit rule, never a player-supplied payout or winner.
-            public HoldemReceipt ResolvePendingSettlement(long expectedVersion) =>
-                table.session.ResolvePendingSettlement(Guid.NewGuid(), expectedVersion, HoldemOddChipRule.ClockwiseFromButton);
+            public HoldemReceipt ResolvePendingSettlement(long expectedVersion)
+            {
+                var before = Read();
+                var receipt = table.session.ResolvePendingSettlement(Guid.NewGuid(), expectedVersion, HoldemOddChipRule.ClockwiseFromButton);
+                if (receipt.Accepted && receipt.Version > before.SessionVersion) table.RecordReturns(before, Read(), null, 0);
+                return receipt;
+            }
             public HoldemReceipt NextHand(long expectedVersion)
             {
+                var previous = Read();
                 HoldemReceipt receipt = table.session.StartNextHand(Guid.NewGuid(), Guid.NewGuid(), expectedVersion);
-                if (receipt.Accepted) table.lastAction = null;
+                if (receipt.Accepted) { table.lastAction = null; table.StartHistory(previous); }
                 return receipt;
             }
         }

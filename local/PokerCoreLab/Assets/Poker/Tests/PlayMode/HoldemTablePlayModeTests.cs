@@ -700,8 +700,8 @@ namespace Poker.Runtime.Tests
             var v = table.Human.Read();
             var claim = table.GetPendingAccusations().Single();
             Assert.That(claim.Target, Is.EqualTo(new SeatId(4)));
-            Assert.That(table.ProcessAccusationHostCommand(HoldemAccusationHostCommand.Verdict(v.SessionId, v.HandId,
-                v.Accusations.WindowId, Guid.NewGuid(), v.SessionVersion, v.Street, claim.ClaimId, false)).Accepted, Is.True);
+            Assert.That(table.ResolveAccusation(claim.ClaimId, new FixedEvidence(HoldemDealerEvidence.ForClaim(claim, false))),
+                Is.EqualTo(HoldemEvidenceResolution.Recorded));
             screen.Render(); yield return null;
             Assert.That(Root.Q<Label>(className: "omc-prompt").text, Does.Contain("결과 처리를 기다리고"));
             Assert.That(table.Human.Read().OwnStack, Is.EqualTo(before.OwnStack));
@@ -738,6 +738,69 @@ namespace Poker.Runtime.Tests
                 new FixedRandom(), new FixedRandom(), new PassivePolicy(), HoldemOddChipRule.ClockwiseFromButton);
             screen = new HoldemTableScreen(Root, table.Human, () => restarts++, 100,
                 Resources.Load<Font>("Fonts/NanumGothic-Regular"), resumeReveal: table.ResumeAfterReveal);
+        }
+
+        [UnityTest]
+        public IEnumerator HandHistoryIsCollapsedByDefaultAndBlocksActionsWhileReading()
+        {
+            Assert.That(Root.Q("omc-history-dialog").resolvedStyle.display, Is.EqualTo(DisplayStyle.None));
+            yield return Resize(new Vector2Int(960, 640));
+            var before = table.Human.Read(); string amount = Root.Q<TextField>("omc-target").value;
+            AssertButtonHit("omc-history"); Submit("omc-history"); yield return null;
+            Assert.That(screen.IsProgressPaused, Is.True);
+            Assert.That(Root.Q<Label>("omc-history-copy").text, Does.Contain("나 · SB 1칩"));
+            Assert.That(Root.Q<Label>("omc-history-copy").text, Does.Contain("상대 · BB 2칩"));
+            Submit("omc-passive"); Submit("omc-fold"); Submit("omc-aggressive"); Submit("omc-max"); Submit("omc-help");
+            Assert.That(table.Human.Read().SessionVersion, Is.EqualTo(before.SessionVersion));
+            Assert.That(Root.Q<TextField>("omc-target").value, Is.EqualTo(amount));
+            AssertButtonHit("omc-close-history"); AssertLayout(); Capture("history-initial-960x640");
+            Submit("omc-close-history"); yield return null;
+            Assert.That(screen.IsProgressPaused, Is.False);
+            Submit("omc-passive"); Assert.That(table.Human.Read().SessionVersion, Is.EqualTo(before.SessionVersion + 1));
+        }
+
+        [UnityTest]
+        public IEnumerator CompletedHistorySurvivesScreenRebuildScrollsAndClearsForNextHand()
+        {
+            yield return CompletePassive();
+            screen.Dispose();
+            screen = new HoldemTableScreen(Root, table.Human, () => restarts++, 100, Resources.Load<Font>("Fonts/NanumGothic-Regular"));
+            yield return Resize(new Vector2Int(960, 640));
+            Submit("omc-history");
+            for (int i = 0; i < 4; i++) yield return null;
+            string copy = Root.Q<Label>("omc-history-copy").text;
+            foreach (string stage in new[] { "프리플랍", "플랍", "턴", "리버" }) Assert.That(copy, Does.Contain(stage));
+            Assert.That(copy, Does.Contain("나 · 콜 · 1칩 추가 / 총 2칩"));
+            Assert.That(copy, Does.Contain("상대 · 체크"));
+            Assert.That(copy, Does.Contain("팟에서 2칩 받음"));
+            var before = table.Human.Read();
+            Submit("omc-next"); Submit("omc-reset"); Assert.That(table.Human.Read().HandId, Is.EqualTo(before.HandId));
+            Assert.That(restarts, Is.Zero); AssertButtonHit("omc-close-history"); Capture("history-complete-960x640");
+            var scroll = Root.Q<ScrollView>("omc-history-scroll");
+            scroll.scrollOffset = new Vector2(0, scroll.verticalScroller.highValue);
+            for (int i = 0; i < 3; i++) yield return null;
+            Assert.That(Root.Q<Label>("omc-history-copy").worldBound.yMax, Is.LessThanOrEqualTo(scroll.contentViewport.worldBound.yMax + 1));
+            AssertButtonHit("omc-close-history"); AssertLayout(); Capture("history-scrolled");
+            Submit("omc-close-history"); Submit("omc-next");
+            yield return new WaitForSecondsRealtime(0.3f);
+            Submit("omc-history"); yield return null;
+            Assert.That(table.Human.Read().HandNumber, Is.EqualTo(2));
+            Assert.That(Root.Q<Label>("omc-history-copy").text, Does.Not.Contain("콜"));
+            Assert.That(Root.Q<Label>("omc-history-copy").text, Does.Not.Contain("팟에서"));
+        }
+
+        [UnityTest]
+        public IEnumerator HistoryShowsFoldRefundWithoutAnyOpponentCards()
+        {
+            Submit("omc-fold"); yield return new WaitForSecondsRealtime(0.3f);
+            Submit("omc-history"); yield return null;
+            string copy = Root.Q<Label>("omc-history-copy").text;
+            Assert.That(copy, Does.Contain("나 · 폴드"));
+            Assert.That(copy, Does.Contain("상대 · 아무도 따라 내지 않은 1칩 반환"));
+            Assert.That(copy, Does.Contain("상대 · 팟에서 2칩 받음"));
+            Assert.That(copy, Does.Not.Contain("공개된 패"));
+            Assert.That(table.Human.Read().OpponentCardCount, Is.Zero);
+            Assert.That(Root.Q("omc-opponent-cards").Query(className: "hidden").ToList().Count, Is.EqualTo(2));
         }
         private IEnumerator ReachAccusationWindow()
         {
@@ -829,6 +892,12 @@ namespace Poker.Runtime.Tests
         { private readonly System.Random random; public SeededRandom(int seed) { random = new System.Random(seed); } public int NextInt(int upper) => random.Next(upper); }
         private sealed class PassivePolicy : IHoldemOpponentPolicy
         { public BettingAction Choose(HoldemSnapshot view, IRandomSource random) => view.LegalActions.CanCheck ? BettingAction.Check() : BettingAction.Call(); }
+        private sealed class FixedEvidence : IHoldemDealerEvidenceSource
+        {
+            private readonly HoldemDealerEvidence evidence;
+            public FixedEvidence(HoldemDealerEvidence evidence) { this.evidence = evidence; }
+            public HoldemDealerEvidence FindEvidence(HoldemAccusationClaim claim) => evidence;
+        }
         private sealed class SessionPort : IHoldemPlayerPort
         {
             private readonly HoldemSession session; private readonly SeatId viewer;
