@@ -78,6 +78,14 @@ namespace Poker.Application
         public IHoldemPlayerPort Human { get; }
         public IHoldemUtterancePlayerPort HumanUtterances { get; }
 
+        // Trusted local host only. NPCs get a seat-bound speech port, not the table or dealer evidence.
+        public IHoldemUtterancePlayerPort BindNpcUtterances(SeatId seat)
+        {
+            if (seat == humanSeat) throw new ArgumentException("Use the human speech port.", nameof(seat));
+            if (utterances == null) throw new InvalidOperationException("Speech is disabled.");
+            return utterances.Bind(seat);
+        }
+
         // Host-only, current-hand batches. A downstream consumer keeps its immutable copies before NextHand.
         public IReadOnlyList<HoldemUtteranceBatch> ReadClosedUtteranceBatches()
             => utterances == null ? Array.Empty<HoldemUtteranceBatch>() : utterances.ReadClosedBatches();

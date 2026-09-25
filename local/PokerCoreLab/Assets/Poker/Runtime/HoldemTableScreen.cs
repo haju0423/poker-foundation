@@ -629,6 +629,7 @@ namespace Poker.Runtime
         {
             var state = view.Accusations;
             bool visible = state != null && state.CanRespond && (accusationPort != null || remoteAccusations != null) && !paused;
+            root.EnableInClassList("with-accusation", visible);
             Show(accusationRow, visible);
             bool enabled = visible && NetworkCanSend && Time.realtimeSinceStartupAsDouble >= lockedUntil;
             accusationRow.SetEnabled(enabled);

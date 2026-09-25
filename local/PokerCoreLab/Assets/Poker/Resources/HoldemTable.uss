@@ -4,13 +4,19 @@
 .omc-dealer-debug-actions { flex-direction: row; flex-shrink: 0; justify-content: center; }
 .omc-dealer-debug-actions Button { height: 30px; min-height: 30px; margin: 4px; font-size: 14px; }
 .omc-multiplayer-dealer-debug { flex-direction: row; align-items: center; }
-.omc-multiplayer-dealer-debug #omc-debug-source { min-width: 125px; max-width: 180px; height: 30px; min-height: 30px; margin: 4px; }
-.omc-multiplayer-dealer-debug #omc-debug-source .unity-base-popup-field__input { background-color: #273d3e; color: #eee9d9; }
-.omc-multiplayer-dealer-debug #omc-debug-source .unity-base-popup-field__text { height: 20px; min-height: 20px; margin: 0; padding: 0; align-self: center; white-space: nowrap; -unity-text-align: middle-left; }
+.omc-dealer-debug #omc-debug-source { min-width: 125px; max-width: 180px; height: 30px; min-height: 30px; margin: 4px; }
+.omc-dealer-debug #omc-debug-source .unity-base-popup-field__input { background-color: #273d3e; color: #eee9d9; }
+.omc-dealer-debug #omc-debug-source .unity-base-popup-field__text { height: 20px; min-height: 20px; margin: 0; padding: 0; align-self: center; white-space: nowrap; -unity-text-align: middle-left; }
+#omc-accusation-target .unity-base-popup-field__input { background-color: #273d3e; color: #eee9d9; }
+#omc-accusation-target .unity-base-popup-field__text { color: #eee9d9; }
 .omc-multiplayer-dealer-debug .omc-dealer-debug-actions { flex-wrap: wrap; }
 .dealer-debug-table .omc-header { height: 64px; }
 .dealer-debug-table.compact .omc-header { height: 56px; }
-.dealer-debug-table.without-amount .omc-controls { height: 84px; }
+.dealer-debug-table.without-amount .omc-controls { height: 110px; }
+.dealer-debug-table.without-amount.compact .omc-controls { height: 100px; }
+.dealer-debug-table.with-accusation .omc-controls { height: 130px; }
+.dealer-debug-table.with-accusation.compact .omc-controls { height: 120px; }
+.dealer-debug-table.with-accusation .omc-actions { flex-shrink: 0; }
 .dealer-debug-table.compact .omc-player .omc-card { height: 70px; width: 56px; }
 .dealer-debug-table .omc-seat-info > Label, .dealer-debug-table .omc-hand-label, .dealer-debug-table .omc-pot, .dealer-debug-table .omc-last { padding-top: 0; padding-bottom: 0; margin-top: 1px; margin-bottom: 1px; }
 .omc-header { flex-direction: row; align-items: center; justify-content: space-between; height: 54px; flex-shrink: 0; }

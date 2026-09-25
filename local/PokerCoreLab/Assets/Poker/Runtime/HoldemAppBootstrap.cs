@@ -70,7 +70,7 @@ namespace Poker.Runtime
             Choice(card, "함께 하기", "omc-menu-multiplayer", "3~4인 · 같은 네트워크에서 방 만들기 / 참가", () => StartMode(Mode.Multiplayer, generation));
             var development = new Foldout { text = "개발용 검사", value = false, name = "omc-menu-development" };
             card.Add(development);
-            Choice(development, "카드 변경 테스트", "omc-menu-dealer-test", "고정 카드 · 수동 테스트 딜러 · 실제 AI 아님",
+            Choice(development, "혼자 카드 변경·고발 테스트", "omc-menu-dealer-test", "NPC 멘트 · 수동 결과 · 실제 AI·고발 정산 없음",
                 () => StartMode(Mode.SoloDealerTest, generation));
             Choice(development, "멀티 고발 테스트", "omc-menu-accusation-test", "3~4인 · 방장 수동 카드 처리 · 실제 AI·고발 정산 없음",
                 () => StartMode(Mode.MultiplayerAccusationTest, generation));

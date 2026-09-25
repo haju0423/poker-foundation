@@ -81,7 +81,9 @@ namespace Poker.Runtime.Tests
                 Assert.That(Root.Q<Label>("omc-dealer-debug-status").text, Does.Contain(outcomes[i]));
                 yield return null; yield return null;
                 Capture("debug-dealer-reveal-" + i);
-                yield return Wait(() => Root.Q<Button>("omc-continue-reveal").enabledInHierarchy);
+                yield return Wait(() => Root.Q<Button>("omc-pass-accusation").enabledInHierarchy);
+                yield return Click("omc-pass-accusation");
+                yield return Wait(() => Root.Q<Button>("omc-continue-reveal").resolvedStyle.display != DisplayStyle.None);
                 yield return Click("omc-continue-reveal");
                 Assert.That(Root.Q<Label>("omc-own-card-change"), Is.Null);
             }
@@ -114,8 +116,60 @@ namespace Poker.Runtime.Tests
             var badge = Root.Q<Label>("omc-own-card-change");
             Assert.That(badge.worldBound.yMax, Is.LessThanOrEqualTo(badge.parent.worldBound.yMax), "Change badge must fit its card.");
             AssertDebugLayout();
-            yield return Wait(() => Root.Q<Button>("omc-continue-reveal").enabledInHierarchy);
+            yield return Wait(() => Root.Q<Button>("omc-pass-accusation").enabledInHierarchy);
+            yield return Click("omc-pass-accusation");
+            yield return Wait(() => Root.Q<Button>("omc-continue-reveal").resolvedStyle.display != DisplayStyle.None);
             yield return Click("omc-continue-reveal");
+        }
+
+        [UnityTest]
+        public IEnumerator DebugNpcActualChangeAndWrongTargetsResolveWithoutLeakingOwnerFeedback()
+        {
+            yield return StartDealerDebug();
+            string[] results = { "change", "unchanged", "timeout", "change", "change" };
+            for (int sample = 0; sample < results.Length; sample++)
+            {
+                if (sample > 0)
+                {
+                    yield return Click("omc-reset"); yield return Click("omc-confirm-reset");
+                    yield return null;
+                }
+                var inject = Root.Q<Button>("omc-debug-npc-speech");
+                yield return Click("omc-debug-npc-speech"); Submit(inject); yield return null;
+                Assert.That(inject.enabledInHierarchy, Is.False, "NPC speech is accepted once per window.");
+                Assert.That(Root.Q<Button>("omc-public-utterance-2").text, Does.Contain("테스트 멘트"));
+                yield return FinishDebugBetting(false);
+                Assert.That(Root.Q<DropdownField>("omc-debug-source").choices[0], Is.EqualTo("NPC 1 멘트"));
+                if (sample == 4) Root.Q<DropdownField>("omc-debug-source").index = 2;
+                yield return Click("omc-dealer-debug-" + results[sample]);
+                yield return Wait(() => Solo.Progress.IsRevealPending);
+                yield return null; yield return null;
+                Assert.That(Root.Q<Label>("omc-own-card-change"), Is.Null, "NPC success must not produce a human owner badge.");
+                if (results[sample] == "change")
+                    Assert.That(Root.Q("omc-board")[0].Q<Label>(className: "omc-rank").text, Is.EqualTo("K"));
+                Root.Q<DropdownField>("omc-accusation-target").index = sample == 4 ? 2 : sample == 3 ? 1 : 0;
+                yield return Wait(() => Root.Q<Button>("omc-accuse").enabledInHierarchy);
+                Capture("solo-before-accuse-" + sample);
+                yield return Click("omc-accuse");
+                yield return Wait(() => Root.Q<Button>("omc-debug-resolve-accusations") != null);
+                var resolve = Root.Q<Button>("omc-debug-resolve-accusations");
+                if (sample == 0)
+                {
+                    long version = Solo.Progress.Version;
+                    yield return Click("omc-help"); Submit(resolve); yield return null;
+                    Assert.That(Solo.Progress.Version, Is.EqualTo(version));
+                    yield return Click("omc-close-help"); yield return null;
+                }
+                yield return Click("omc-debug-resolve-accusations");
+                Assert.That(Root.Q<Label>(className: "omc-prompt").text,
+                    Does.Contain(sample == 0 || sample == 4 ? "내 고발 적중" : "내 고발 오적중"));
+                long settledVersion = Solo.Progress.Version;
+                Submit(resolve); Submit(inject); yield return null;
+                Assert.That(Solo.Progress.Version, Is.EqualTo(settledVersion));
+                Assert.That(Root.Q<Button>("omc-continue-reveal").resolvedStyle.display, Is.EqualTo(DisplayStyle.None));
+                Assert.That(Root.Q<Label>("omc-dealer-debug-status").text, Does.Contain("벌금·팟 지급은 미적용"));
+                Capture("solo-accusation-" + sample);
+            }
         }
 
         private void AssertDebugLayout()

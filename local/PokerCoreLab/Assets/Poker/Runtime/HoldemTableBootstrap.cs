@@ -48,7 +48,7 @@ namespace Poker.Runtime
             if (EnableDealerDebug) options = new HoldemTableOptions(options.SeatCount, options.OpponentDelaySeconds,
                 HoldemRevealPolicy.PauseAfterCommunityReveal);
             HoldemConfig config = new HoldemConfig(original.StartingStack, original.SmallBlind, original.BigBlind,
-                options.RevealPolicy, EnableDealerDebug ? HoldemAccusationMode.Disabled : original.AccusationMode,
+                options.RevealPolicy, EnableDealerDebug ? HoldemAccusationMode.CollectLatestChoiceUntilHostCloses : original.AccusationMode,
                 EnableDealerDebug ? HoldemDealPolicy.WaitForHost : original.DealPolicy);
             var doc = GetComponent<UIDocument>();
             Font font = Resources.Load<Font>("Fonts/NanumGothic-Regular");
@@ -87,6 +87,7 @@ namespace Poker.Runtime
             dealerDebug = candidateDebug;
             Schedule();
 #if !UNITY_EDITOR
+            HoldemSoloAccusationProcessCheck.AttachIfRequested(this);
             // Explicit headless startup check for the packaged player; never used during normal play.
             if (UnityEngine.Application.isBatchMode
                 && Array.IndexOf(Environment.GetCommandLineArgs(), "-omc-check-startup") >= 0)
