@@ -12,7 +12,7 @@ using UnityEngine;
 namespace Poker.Runtime
 {
     /// <summary>Explicit, headless-only packaged-player smoke check. Never enabled during normal play.</summary>
-    internal sealed class HoldemMultiplayerProcessCheck : MonoBehaviour
+    internal sealed partial class HoldemMultiplayerProcessCheck : MonoBehaviour
     {
         private HoldemMultiplayerBootstrap bootstrap;
         private bool hosting, finished, finishMatch, speechCheck, extendedCheck, sawThreePlayers, sawTwoPlayers;
@@ -55,7 +55,7 @@ namespace Poker.Runtime
                 string scenario = Argument("-omc-peer-scenario");
                 if (Array.IndexOf(Environment.GetCommandLineArgs(), "-omc-peer-scenario") >= 0
                     && scenario != "finish-match" && scenario != "speech-intake" && scenario != "dealer-timeout"
-                    && scenario != "dealer-callback" && scenario != "rematch")
+                    && scenario != "dealer-callback" && scenario != "dealer-card-change" && scenario != "rematch")
                     throw new ArgumentException();
                 rematchCheck = scenario == "rematch";
                 finishMatch = scenario == "finish-match" || rematchCheck;
@@ -68,8 +68,12 @@ namespace Poker.Runtime
                 if (finishMatch && seatCapacity != 4) throw new ArgumentException();
                 dealerTimeoutCheck = scenario == "dealer-timeout";
                 dealerCallbackCheck = scenario == "dealer-callback";
-                speechCheck = scenario == "speech-intake" || dealerTimeoutCheck || dealerCallbackCheck;
-                if ((dealerTimeoutCheck || dealerCallbackCheck) && !bootstrap.Settings.enableFlowPreview) throw new ArgumentException();
+                cardChangeCheck = scenario == "dealer-card-change";
+                speechCheck = scenario == "speech-intake" || dealerTimeoutCheck || dealerCallbackCheck || cardChangeCheck;
+                if ((dealerTimeoutCheck || dealerCallbackCheck || cardChangeCheck) && !bootstrap.Settings.enableFlowPreview) throw new ArgumentException();
+                if (cardChangeCheck && (bootstrap.Settings.utteranceVisibility != HoldemUtteranceVisibility.PublicRaw
+                    || bootstrap.Settings.utteranceBatchRetention != HoldemUtteranceBatchRetention.UntilHostAcknowledges))
+                    throw new ArgumentException("Card-change checks require public remarks and retained host input.");
                 extendedCheck = Array.IndexOf(Environment.GetCommandLineArgs(), "-omc-peer-hands") >= 0;
                 if (extendedCheck && (scenario != null || bootstrap.Settings.enableFlowPreview
                     || !int.TryParse(Argument("-omc-peer-hands"), NumberStyles.None, CultureInfo.InvariantCulture, out handTarget)
@@ -84,7 +88,7 @@ namespace Poker.Runtime
                 bool started = hosting
                     ? bootstrap.Connection.Host("검사 방장", "127.0.0.1", port, false, bootstrap.Settings.CreateConfig(
                         bootstrap.Settings.startingStack, bootstrap.Settings.smallBlind, bootstrap.Settings.bigBlind, seatCapacity),
-                        finishMatch || extendedCheck ? new CheckRandom() : null,
+                        cardChangeCheck ? new OrderedCardChangeDeck() : finishMatch || extendedCheck ? new CheckRandom() : null,
                         bootstrap.Settings.CreateUtterancePolicy(), seatCapacity)
                     : bootstrap.Connection.Join(Argument("-omc-peer-name") ?? "검사 참가자", "127.0.0.1", port, false);
                 if (!started) throw new InvalidOperationException();
@@ -162,6 +166,7 @@ namespace Poker.Runtime
                     finishAt = Time.realtimeSinceStartupAsDouble + (hosting ? 15 : 10); return;
                 }
                 if (speechCheck && !CheckSpeech(remote, view)) return;
+                if (cardChangeCheck) CheckCardChangeDisplay(view);
                 if (view.Result != null)
                 {
                     if (reportedHand != view.HandNumber)
@@ -194,8 +199,12 @@ namespace Poker.Runtime
                         if (bootstrap.Settings.enableFlowPreview && hosting && !finishMatch
                             && (checkedDeals.Count != 9 || checkedReveals.Count != 9))
                             throw new CheckFailure("FlowGateCoverage");
+                        if (cardChangeCheck) CheckCardChangeCompletion(view);
                         finishMessage = finishMatch ? "OMC_PEER_MATCH_OK seat=" + view.ViewerSeat.Value + " hands=" + view.HandNumber
                             + " survivor=" + survivor + " chips=" + chips + " version=" + view.SessionVersion
+                            : cardChangeCheck ? "OMC_PEER_CARD_CHANGE_OK seat=" + view.ViewerSeat.Value
+                                + " hands=3 reveals=" + observedCardReveals.Count + " own=" + ownCardReveals
+                                + " chips=" + chips + " version=" + view.SessionVersion
                             : speechCheck ? "OMC_PEER_SPEECH_OK seat=" + view.ViewerSeat.Value
                                 + " hands=3 accepted=" + confirmedSpeech.Count + " batches=" + (hosting ? consumedBatches.Count.ToString() : "host-only")
                                 + " chips=" + chips + " version=" + view.SessionVersion
@@ -245,7 +254,11 @@ namespace Poker.Runtime
                             || turn.ExpectedVersion != view.SessionVersion || turn.SourceUtterances == null
                             || turn.SourceUtterances.Count != seatCapacity || !consumedBatches.Contains(turn.SourceUtterances.WindowId))
                             throw new CheckFailure("DealerTurnCorrelation");
-                        if (dealerCallbackCheck)
+                        if (cardChangeCheck)
+                        {
+                            if (!CompleteScriptedCardChange(dealer, view)) return;
+                        }
+                        else if (dealerCallbackCheck)
                         {
                             var coordinator = bootstrap.Connection.DealerCoordinator;
                             if (dealerCallback != null)
@@ -285,6 +298,7 @@ namespace Poker.Runtime
                 }
                 else if (view.IsRevealPending && hosting)
                 {
+                    if (cardChangeCheck && Time.realtimeSinceStartupAsDouble < cardRevealAdvanceAt) return;
                     if (!TryBeginInput()) return;
                     remote.Reveal(view);
                     checkedReveals.Add(view.HandId.ToString("N") + ":" + (int)view.Street);
@@ -475,6 +489,7 @@ namespace Poker.Runtime
             for (int i = 0; i + 1 < args.Length; i++) if (args[i] == key) return args[i + 1];
             return null;
         }
-        private void OnDestroy() => dealerTimeout?.Dispose();
+        private void OnDestroy()
+        { dealerTimeout?.Dispose(); cardChangeCoordinator?.Dispose(); }
     }
 }
