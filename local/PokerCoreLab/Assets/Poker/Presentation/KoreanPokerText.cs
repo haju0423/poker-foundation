@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using Poker.Application;
 using Poker.Foundation;
 
 namespace Poker.Presentation
@@ -7,6 +8,18 @@ namespace Poker.Presentation
     /// <summary>Korean labels and formatting for poker actions, cards and settlement.</summary>
     public static class KoreanPokerText
     {
+        public static string StreetName(HoldemStreet street)
+        {
+            switch (street)
+            {
+                case HoldemStreet.Preflop: return "프리플랍";
+                case HoldemStreet.Flop: return "플랍";
+                case HoldemStreet.Turn: return "턴";
+                case HoldemStreet.River: return "리버";
+                default: throw new ArgumentOutOfRangeException(nameof(street));
+            }
+        }
+
         public static string ActionName(BettingActionKind kind)
         {
             switch (kind)
@@ -32,10 +45,12 @@ namespace Poker.Presentation
             switch (error)
             {
                 case HoldemCommandError.WrongTurn: return "지금은 다른 참가자의 차례예요.";
+                case HoldemCommandError.DealPending: return "딜러가 다음 공용 카드를 준비하고 있어요.";
                 case HoldemCommandError.IllegalAction: return "지금 가능한 행동과 금액을 다시 확인해 주세요.";
                 case HoldemCommandError.Busy: return "앞선 행동을 처리하고 있어요. 잠시 뒤 다시 눌러 주세요.";
                 case HoldemCommandError.HandComplete: return "이번 판은 끝났어요. 결과를 확인해 주세요.";
                 case HoldemCommandError.CannotContinue: return "테이블 승부가 끝났어요. 새 게임을 시작해 주세요.";
+                case HoldemCommandError.MatchNotOver: return "최종 승부가 끝난 뒤에 다시 시작할 수 있어요.";
                 case HoldemCommandError.SettlementRuleRequired:
                 case HoldemCommandError.InvalidSettlementRule: return "나머지 칩의 배분 순서를 먼저 확인해 주세요.";
                 case HoldemCommandError.RevealPending: return "공용 카드를 확인한 뒤 ‘계속’을 눌러 주세요.";
@@ -55,6 +70,22 @@ namespace Poker.Presentation
             if (amount < 0) throw new ArgumentOutOfRangeException(nameof(amount));
             return amount.ToString("N0", CultureInfo.InvariantCulture) + "칩";
         }
+
+        public static string RoomSettingsDescription(HoldemRoomRules rules)
+        {
+            if (rules == null) return "이 방의 설정 정보는 제공되지 않아요. 시작 칩과 블라인드는 방장에게 확인해 주세요.";
+            return "방 인원: " + rules.SeatCapacity + "인\n시작 칩: " + Chips(rules.StartingStack)
+                + "\n스몰 블라인드: " + Chips(rules.SmallBlind)
+                + "\n빅 블라인드: " + Chips(rules.BigBlind)
+                + "\n\n공용 카드: " + (rules.WaitsForHostDeal ? "방장이 공개" : "자동 공개")
+                + "\n카드 공개 후: " + (rules.PausesAfterReveal ? "확인 후 방장이 계속" : "별도 확인 없이 계속")
+                + "\n멘트: " + UtteranceVisibilityDescription(rules)
+                + "\n\n방을 만들 때 정한 설정이에요. 다음 판은 현재 보유 칩으로 이어져요.";
+        }
+
+        public static string UtteranceVisibilityDescription(HoldemRoomRules rules) => rules == null || !rules.ReceivesUtterances
+            ? "사용 안 함" : rules.PublishesUtterances ? "원문과 발언자 모두 공개 · AI나 카드에는 반영되지 않아요."
+                : "접수 확인용 · AI나 카드에는 반영되지 않아요.";
         public static string CallLabel(long additionalAmount, bool allIn = false)
         {
             RequirePositive(additionalAmount);
@@ -116,6 +147,18 @@ namespace Poker.Presentation
                 case HandCategory.StraightFlush: return "스트레이트 플러시";
                 default: throw new ArgumentOutOfRangeException(nameof(value));
             }
+        }
+
+        // Compact label only; HandDescription contains every rank used to break a tie.
+        public static string HandSummary(HandValue value)
+        {
+            string name = HandName(value);
+            if (value.Category == HandCategory.StraightFlush && value.GetTieBreaker(0) == (int)Rank.Ace)
+                return name;
+            string ranks = RankText(value.GetTieBreaker(0));
+            if (value.Category == HandCategory.TwoPair || value.Category == HandCategory.FullHouse)
+                ranks += "·" + RankText(value.GetTieBreaker(1));
+            return name + " " + ranks;
         }
 
         public static string HandDescription(HandValue value)

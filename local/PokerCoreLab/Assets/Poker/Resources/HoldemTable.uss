@@ -24,7 +24,7 @@
 .omc-board { height: 112px; }
 .omc-card { width: 76px; height: 100px; margin: 0 6px; border-radius: 8px; padding: 6px 8px; background-color: #f3efdf; border-width: 2px; border-color: #d2d6c5; color: #1d3540; justify-content: space-between; align-items: center; flex-shrink: 0; }
 .omc-card.red { color: #ad4642; }
-.omc-card.best { border-color: #ffc969; border-width: 3px; background-color: #fff2cd; }
+.omc-card.best { border-color: #69b8d0; border-width: 3px; background-color: #e8f4f6; }
 .omc-rank { font-size: 28px; -unity-font-style: bold; margin: 0; padding: 0; }
 .omc-suit { font-size: 24px; margin: 0; padding: 0; }
 .omc-opponent .omc-rank { font-size: 21px; }
@@ -116,3 +116,46 @@ Button:disabled { opacity: 0.35; }
 .multi-seat .omc-player.acting-seat { background-color: transparent; }
 .omc-root.pending .omc-controls { height: 110px; }
 .omc-root.pending.compact .omc-controls { height: 100px; }
+
+.with-utterance .omc-player .omc-seat-info { width: 130px; margin-right: 12px; }
+.omc-utterance { width: 340px; margin-left: 22px; height: 78px; flex-shrink: 0; }
+.compact .omc-utterance { margin-left: 12px; }
+.omc-utterance-row { flex-direction: row; align-items: center; height: 36px; }
+.omc-utterance-row > Label { font-size: 13px; color: #9cb2a7; margin-right: 8px; }
+.omc-utterance-input { flex-grow: 1; flex-shrink: 1; flex-basis: 0; min-width: 0; height: 30px; font-size: 15px; }
+.omc-utterance-input .unity-text-element { color: #193b34; }
+.omc-utterance-input > .unity-text-field__input { padding-top: 0; padding-bottom: 0; }
+.omc-utterance-row Button { height: 30px; font-size: 13px; min-width: 76px; padding: 2px 8px; }
+.omc-utterance-status { font-size: 12px; color: #b1c7b9; height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.omc-utterance-scope { font-size: 11px; color: #9fb9bf; height: 16px; white-space: nowrap; }
+.omc-hand-area .omc-compare { height: 19px; min-width: 0; font-size: 12px; padding: 0 4px; margin: 3px 0 0 0; border-width: 0; border-bottom-width: 1px; border-bottom-color: #819989; border-radius: 0; color: #c6d4bc; background-color: transparent; }
+.omc-hand-area .omc-compare.selected { color: #9cd9e7; border-bottom-color: #9cd9e7; }
+.omc-hand-area .omc-compare:hover { background-color: #34594b; }
+.multi-seat .omc-opponent .omc-compare { font-size: 11px; }
+
+/* The remote table shares its height with the connection bar. */
+.remote-table .omc-table { padding-top: 8px; padding-bottom: 8px; }
+.remote-table .omc-seat-info > Label { padding-top: 0; padding-bottom: 0; margin-top: 1px; margin-bottom: 1px; }
+.remote-table .omc-seat-heading { flex-direction: row; align-items: center; width: 100%; }
+.remote-table .omc-seat-heading > Label { padding: 0; margin-top: 1px; margin-bottom: 1px; }
+.remote-table .omc-seat-heading .omc-seat-title { flex-grow: 1; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.remote-table .omc-seat-position { flex-shrink: 0; margin-left: 3px; font-size: 11px; color: #c4d4c6; }
+.remote-table .omc-seat-connection { flex-shrink: 0; margin-left: 3px; font-size: 10px; color: #f0d282; }
+.remote-table.multi-seat.compact .omc-opponent .omc-seat-title { white-space: nowrap; font-size: 12px; }
+.remote-table .omc-hand-label { padding-top: 0; padding-bottom: 0; margin-top: 2px; margin-bottom: 0; }
+.remote-table .omc-pot { padding-top: 0; padding-bottom: 0; margin-top: 0; margin-bottom: 0; }
+.remote-table .omc-last { padding-top: 0; padding-bottom: 0; margin-top: 1px; margin-bottom: 1px; }
+.remote-table.without-amount .omc-controls { height: 110px; }
+.remote-table.without-amount.compact .omc-controls { height: 100px; }
+.remote-table .omc-stack.long-amount { font-size: 12px; white-space: normal; }
+.remote-table.multi-seat .omc-opponent .omc-stack.long-amount { font-size: 12px; }
+.remote-table .omc-seat-status { white-space: normal; }
+.remote-table .omc-seat.with-public-utterance { flex-direction: column; align-items: stretch; width: 246px; max-width: 31%; min-width: 0; }
+.remote-table.compact .omc-seat.with-public-utterance { width: 218px; }
+.omc-seat-body { flex-direction: row; align-items: center; justify-content: center; }
+.omc-public-utterance { height: 25px; min-width: 0; flex-shrink: 0; margin: 5px 0 0 0; padding: 2px 5px; font-size: 12px; color: #d6e3d9; background-color: #193a32; background-image: none; border-width: 1px; border-color: #48685a; -unity-text-align: middle-left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.compact .omc-public-utterance { height: 20px; margin-top: 2px; padding-top: 0; padding-bottom: 0; font-size: 11px; }
+.remote-table.with-public-speech.compact .omc-player .omc-card { height: 70px; width: 56px; }
+.remote-table .omc-amount-hint { max-width: 250px; white-space: normal; padding-top: 0; padding-bottom: 0; margin-top: 0; margin-bottom: 0; }
+.remote-table .omc-actions Button { max-width: 340px; white-space: normal; }
+.remote-table .omc-actions Button.long-amount { font-size: 13px; height: 42px; padding-top: 2px; padding-bottom: 2px; }

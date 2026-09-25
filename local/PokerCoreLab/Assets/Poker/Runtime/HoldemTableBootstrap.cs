@@ -23,7 +23,8 @@ namespace Poker.Runtime
             {
                 if (table == null) return default;
                 var view = table.Human.Read();
-                return new HoldemProgressInfo(view.Street, view.LegalActions != null, view.SessionVersion, view.HandNumber, view.SeatCount);
+                return new HoldemProgressInfo(view.Street, view.LegalActions != null, view.SessionVersion,
+                    view.HandNumber, view.SeatCount, view.IsDealPending, view.IsRevealPending);
             }
         }
         private void OnEnable()
@@ -42,7 +43,7 @@ namespace Poker.Runtime
             HoldemConfig original = settings.CreateConfig();
             options = options ?? new HoldemTableOptions(settings.seatCount, settings.opponentDelaySeconds, settings.revealPolicy);
             HoldemConfig config = new HoldemConfig(original.StartingStack, original.SmallBlind, original.BigBlind,
-                options.RevealPolicy, original.AccusationMode);
+                options.RevealPolicy, original.AccusationMode, original.DealPolicy);
             var doc = GetComponent<UIDocument>();
             Font font = Resources.Load<Font>("Fonts/NanumGothic-Regular");
             if (doc == null || doc.panelSettings == null || font == null || Resources.Load<StyleSheet>("HoldemTable") == null)
@@ -54,11 +55,15 @@ namespace Poker.Runtime
             var surface = new VisualElement();
             try
             {
-                candidate = new HoldemLocalTable(config, options.SeatCount, nextDeck, nextOpponent);
+                candidate = new HoldemLocalTable(config, options.SeatCount, nextDeck, nextOpponent,
+                    utterancePolicy: settings.CreateUtterancePolicy());
                 // Construct and render off-tree first. A failed replacement must leave the old table visible.
                 candidateScreen = new HoldemTableScreen(surface, candidate.Human, StartNewSession, config.StartingStack, font,
                     () => StartNewSession(true), candidate.ResumeAfterReveal, options,
-                    original.AccusationMode == HoldemAccusationMode.Disabled ? ConfigureSession : (Action<HoldemTableOptions>)null);
+                    original.AccusationMode == HoldemAccusationMode.Disabled ? ConfigureSession : (Action<HoldemTableOptions>)null,
+                    dealUnchanged: original.DealPolicy == HoldemDealPolicy.WaitForHost
+                        ? candidate.DealUnchanged : (Func<HoldemDealCommand, HoldemReceipt>)null,
+                    utterancePort: candidate.HumanUtterances);
             }
             catch { candidateScreen?.Dispose(); nextDeck.Dispose(); nextOpponent.Dispose(); throw; }
             screen?.Dispose(); deckRandom?.Dispose(); opponentRandom?.Dispose();
@@ -118,12 +123,18 @@ namespace Poker.Runtime
     /// <summary>Non-sensitive progress for scene tests; carries no private cards or authority access.</summary>
     public readonly struct HoldemProgressInfo
     {
-        public HoldemProgressInfo(HoldemStreet street, bool ownTurn, long version, long handNumber, int seatCount = 2)
-        { Street = street; OwnTurn = ownTurn; Version = version; HandNumber = handNumber; SeatCount = seatCount; }
+        public HoldemProgressInfo(HoldemStreet street, bool ownTurn, long version, long handNumber, int seatCount = 2,
+            bool isDealPending = false, bool isRevealPending = false)
+        {
+            Street = street; OwnTurn = ownTurn; Version = version; HandNumber = handNumber; SeatCount = seatCount;
+            IsDealPending = isDealPending; IsRevealPending = isRevealPending;
+        }
         public HoldemStreet Street { get; }
         public bool OwnTurn { get; }
         public long Version { get; }
         public long HandNumber { get; }
         public int SeatCount { get; }
+        public bool IsDealPending { get; }
+        public bool IsRevealPending { get; }
     }
 }

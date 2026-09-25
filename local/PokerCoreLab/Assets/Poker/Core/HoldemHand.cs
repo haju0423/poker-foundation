@@ -21,7 +21,7 @@ namespace Poker.Foundation
             Card[] ownedBoard, Deck ownedDeck, HoldemStreet street,
             BettingRound betting, HoldemOddChipRule oddChipRule,
             HoldemSettlement result, SeatId[] ownedPendingSeats,
-            HoldemEvaluatedHand[] ownedPendingHands, bool isRevealPending = false)
+            HoldemEvaluatedHand[] ownedPendingHands, bool isRevealPending = false, bool isDealPending = false)
         {
             HandId = handId;
             Version = version;
@@ -41,6 +41,7 @@ namespace Poker.Foundation
             pendingSeats = ownedPendingSeats;
             pendingHands = ownedPendingHands;
             IsRevealPending = isRevealPending;
+            IsDealPending = isDealPending;
         }
 
         public Guid HandId { get; }
@@ -58,7 +59,9 @@ namespace Poker.Foundation
             : HoldemSettlementState.None;
         public bool IsSettlementPending => SettlementState == HoldemSettlementState.AwaitingOddChipPriority;
         public bool IsRevealPending { get; }
-        public SeatId? CurrentSeat => SettlementState == HoldemSettlementState.None && !IsRevealPending
+        public bool IsDealPending { get; }
+        public HoldemStreet? PendingDealStreet => IsDealPending ? (HoldemStreet)((int)Street + 1) : (HoldemStreet?)null;
+        public SeatId? CurrentSeat => SettlementState == HoldemSettlementState.None && !IsRevealPending && !IsDealPending
             ? CurrentBetting.CurrentSeat : (SeatId?)null;
         public bool IsComplete => Result != null;
         public HoldemSettlement Result { get; }
@@ -163,6 +166,7 @@ namespace Poker.Foundation
         {
             if (action == null) throw new ArgumentNullException(nameof(action));
             RequireSeat(seat);
+            if (IsDealPending) throw new InvalidOperationException("The host must complete the pending deal first.");
             if (IsRevealPending) throw new InvalidOperationException("The community-card reveal must be resolved first.");
             if (SettlementState != HoldemSettlementState.None)
                 throw new InvalidOperationException(IsComplete ? "The hand is complete." : "Settlement priority is required.");
@@ -191,6 +195,14 @@ namespace Poker.Foundation
             var resumed = NewState(nextVersion, foldedSeats, board, deck.Copy(),
                 Street, CurrentBetting, null, null, null);
             return CurrentBetting.IsComplete ? resumed.AdvanceAfterCompletedBetting(null, nextVersion) : resumed;
+        }
+
+        /// <summary>Host-only neutral path. Draws from the existing deck without interpretation or manipulation.</summary>
+        public HoldemHand DealUnchanged(HoldemStreet expectedStreet)
+        {
+            if (!IsDealPending) throw new InvalidOperationException("No community-card deal is pending.");
+            if (expectedStreet != PendingDealStreet) throw new InvalidOperationException("The pending deal has changed.");
+            return AdvanceAfterCompletedBetting(null, checked(Version + 1), true);
         }
 
         /// <summary>Trusted host resolution; players never supply a payout order.</summary>
@@ -228,7 +240,7 @@ namespace Poker.Foundation
             throw new InvalidOperationException("Revealed showdown hand lookup failed.");
         }
 
-        private HoldemHand AdvanceAfterCompletedBetting(SeatId? lastFoldedSeat, long version)
+        private HoldemHand AdvanceAfterCompletedBetting(SeatId? lastFoldedSeat, long version, bool releaseFirstDeal = false)
         {
             SeatId[] live = LiveSeats();
             if (live.Length == 1)
@@ -246,6 +258,11 @@ namespace Poker.Foundation
             {
                 if (completedStreet == HoldemStreet.River)
                     return CompleteOrAwaitPriority(version, nextBoard, nextDeck, completedBetting);
+
+                if (Config.DealPolicy == HoldemDealPolicy.WaitForHost && !releaseFirstDeal)
+                    return NewState(version, foldedSeats, nextBoard, nextDeck,
+                        completedStreet, completedBetting, null, null, null, isDealPending: true);
+                releaseFirstDeal = false;
 
                 nextDeck = nextDeck.Copy();
                 nextDeck.Draw(1);
@@ -308,10 +325,10 @@ namespace Poker.Foundation
         private HoldemHand NewState(long version, SeatId[] nextFolded, Card[] nextBoard,
             Deck nextDeck, HoldemStreet street, BettingRound betting,
             HoldemSettlement result, SeatId[] nextPendingSeats,
-            HoldemEvaluatedHand[] nextPendingHands, bool isRevealPending = false)
+            HoldemEvaluatedHand[] nextPendingHands, bool isRevealPending = false, bool isDealPending = false)
             => new HoldemHand(HandId, version, Config, seats, holeCards, nextFolded,
                 ButtonSeat, SmallBlindSeat, BigBlindSeat, nextBoard, nextDeck, street,
-                betting, oddChipRule, result, nextPendingSeats, nextPendingHands, isRevealPending);
+                betting, oddChipRule, result, nextPendingSeats, nextPendingHands, isRevealPending, isDealPending);
 
         private SeatId[] LiveSeats()
         {

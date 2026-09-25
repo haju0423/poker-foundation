@@ -1,0 +1,8 @@
+{
+  "name": "Poker.Editor.Tests",
+  "rootNamespace": "Poker.Editor.Tests",
+  "references": ["Poker.Editor"],
+  "includePlatforms": ["Editor"],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "autoReferenced": false
+}

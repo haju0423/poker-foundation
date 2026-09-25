@@ -140,7 +140,7 @@ namespace Poker.Foundation
             HoldemButtonPolicy buttonPolicy, bool canContinue, bool isOver,
             SeatId? sessionWinnerSeat, SeatId? compatibilityBustedSeat,
             SeatId[] roster, ChipLedger baseRosterLedger, HoldemHand hand, SeatId viewer,
-            HoldemAccusationView accusations = null)
+            HoldemAccusationView accusations = null, HoldemDealWindow pendingDeal = null)
         {
             if (hand == null) throw new ArgumentNullException(nameof(hand));
             if (roster == null) throw new ArgumentNullException(nameof(roster));
@@ -160,6 +160,8 @@ namespace Poker.Foundation
             Street = hand.Street;
             SettlementState = hand.SettlementState;
             IsRevealPending = hand.IsRevealPending;
+            IsDealPending = hand.IsDealPending;
+            PendingDeal = pendingDeal;
             Accusations = accusations;
             ButtonSeat = hand.ButtonSeat;
             SmallBlindSeat = hand.SmallBlindSeat;
@@ -193,6 +195,8 @@ namespace Poker.Foundation
         public HoldemSettlementState SettlementState { get; }
         public bool IsSettlementPending => SettlementState == HoldemSettlementState.AwaitingOddChipPriority;
         public bool IsRevealPending { get; }
+        public bool IsDealPending { get; }
+        public HoldemDealWindow PendingDeal { get; }
         public HoldemAccusationView Accusations { get; }
         public SeatId ButtonSeat { get; }
         public SeatId SmallBlindSeat { get; }

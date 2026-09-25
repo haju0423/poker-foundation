@@ -6,6 +6,26 @@ namespace Poker.Runtime.Tests
 {
     public sealed class HoldemTableOptionsTests
     {
+        [Test]
+        public void TableSettingsRequireExplicitOptInForHostDealing()
+        {
+            var settings = UnityEngine.ScriptableObject.CreateInstance<HoldemTableSettings>();
+            try
+            {
+                Assert.That(settings.CreateConfig().DealPolicy, Is.EqualTo(HoldemDealPolicy.Automatic));
+                Assert.That(settings.CreateUtterancePolicy(), Is.Null);
+                settings.enableUtterancePreview = true;
+                Assert.Throws<InvalidOperationException>(() => settings.CreateUtterancePolicy());
+                settings.dealPolicy = HoldemDealPolicy.WaitForHost;
+                Assert.That(settings.CreateUtterancePolicy().MaximumPerSeatPerStreet, Is.EqualTo(1));
+                Assert.That(settings.CreateConfig().DealPolicy, Is.EqualTo(HoldemDealPolicy.WaitForHost));
+                Assert.That(settings.CreateConfig().AccusationMode, Is.EqualTo(HoldemAccusationMode.Disabled));
+                settings.dealPolicy = (HoldemDealPolicy)99;
+                Assert.Throws<ArgumentOutOfRangeException>(() => settings.CreateConfig());
+            }
+            finally { UnityEngine.Object.DestroyImmediate(settings); }
+        }
+
         [TestCase(2)] [TestCase(3)] [TestCase(4)]
         public void ValidOptionsKeepTheirValues(int seats)
         {

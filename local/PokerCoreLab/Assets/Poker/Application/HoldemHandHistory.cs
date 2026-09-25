@@ -30,11 +30,12 @@ namespace Poker.Application
     public sealed class HoldemHandHistory
     {
         private readonly HoldemHistoryEntry[] entries;
-        internal HoldemHandHistory(Guid sessionId, Guid handId, long handNumber, List<HoldemHistoryEntry> entries)
-        { SessionId = sessionId; HandId = handId; HandNumber = handNumber; this.entries = entries.ToArray(); }
+        internal HoldemHandHistory(Guid sessionId, Guid handId, long handNumber, List<HoldemHistoryEntry> entries, long omittedCount = 0)
+        { SessionId = sessionId; HandId = handId; HandNumber = handNumber; this.entries = entries.ToArray(); OmittedCount = omittedCount; }
         public Guid SessionId { get; }
         public Guid HandId { get; }
         public long HandNumber { get; }
+        public long OmittedCount { get; }
         public int Count => entries.Length;
         public HoldemHistoryEntry GetEntry(int index) => entries[index];
     }

@@ -11,7 +11,7 @@ using UnityEngine.UIElements;
 
 namespace Poker.Runtime.Tests
 {
-    public sealed class HoldemTablePlayModeTests
+    public sealed partial class HoldemTablePlayModeTests
     {
         private GameObject go;
         private UIDocument document;
@@ -54,7 +54,10 @@ namespace Poker.Runtime.Tests
             Assert.That(Root.Q("omc-opponent-cards").Query(className: "hidden").ToList().Count, Is.EqualTo(2));
             Assert.That(Root.Q("omc-board").Query(className: "empty").ToList().Count, Is.EqualTo(5));
             Assert.That(Root.Q<Button>("exchange"), Is.Null);
+            Assert.That(Root.Q("omc-utterance"), Is.Null);
             Assert.That(Root.Q<Label>(className: "omc-title").text, Is.EqualTo("One More Card"));
+            Assert.That(Root.Q<Label>(className: "omc-subtitle").text, Is.EqualTo("텍사스 홀덤"));
+            Assert.That(Root.Q<Button>("omc-release-deal").resolvedStyle.display, Is.EqualTo(DisplayStyle.None));
             Assert.That(Root.Q<Button>("omc-passive").text, Is.EqualTo("콜 · 1칩 추가"));
             Assert.That(Root.Q<Button>("omc-pot-details").resolvedStyle.display, Is.EqualTo(DisplayStyle.None));
             Assert.That(table.Human.Read().Street, Is.EqualTo(HoldemStreet.Preflop));
@@ -71,7 +74,8 @@ namespace Poker.Runtime.Tests
             Assert.That(Root.Query(className: "face-card").ToList().Count, Is.EqualTo(9));
             Assert.That(Root.Query(className: "best").ToList().Count, Is.EqualTo(5));
             Assert.That(Root.Q<Label>(className: "omc-result").text, Does.Contain("무승부"));
-            Assert.That(Root.Q<Label>(className: "omc-last").text, Does.Contain("쇼다운"));
+            Assert.That(Root.Q<Label>(className: "omc-last").text, Is.EqualTo("쇼다운 · 나: "
+                + Poker.Presentation.KoreanPokerText.HandDescription(settled.GetSeat(settled.ViewerSeat).RevealedHandValue.Value)));
             yield return WaitEnabled("omc-next");
             AssertLayout(); Capture("showdown");
             foreach (var size in new[] { new Vector2Int(960, 640), new Vector2Int(1280, 720) })
@@ -113,14 +117,22 @@ namespace Poker.Runtime.Tests
         public IEnumerator InvalidRaiseAndRapidDuplicateCannotAlterStateTwice()
         {
             var input = Root.Q<TextField>("omc-target");
-            foreach (string value in new[] { "", "-2", "3.5", "abc", "3", "101", "9999999999999999999" })
+            Assert.That(input.maxLength, Is.EqualTo(64));
+            foreach (string value in new[] { "", "-2", "3.5", "abc", "3", "101", "9999999999999999999",
+                "1,00", "1,0000", "1,,000", "9,223,372,036,854,775,8070" })
             {
-                input.value = value; Submit("omc-aggressive");
+                input.value = value;
+                Assert.That(input.value, Is.EqualTo(value), "Invalid input must not become another amount through truncation.");
+                Submit("omc-aggressive");
                 Assert.That(table.Human.Read().SessionVersion, Is.EqualTo(1));
                 Assert.That(Root.Q<Button>("omc-aggressive").enabledInHierarchy, Is.False);
                 string expected = value == "3" ? "최소 총액 4칩" : value == "101" ? "최대 총액 100칩" : "금액은 숫자로 입력해 주세요.";
                 Assert.That(Root.Q<Label>("omc-amount-hint").text, Is.EqualTo(expected));
             }
+            input.value = "1,000"; Submit("omc-aggressive");
+            Assert.That(table.Human.Read().SessionVersion, Is.EqualTo(1));
+            Assert.That(Root.Q<Button>("omc-aggressive").enabledInHierarchy, Is.False);
+            Assert.That(Root.Q<Label>("omc-amount-hint").text, Is.EqualTo("최대 총액 100칩"));
             input.value = "8"; Submit("omc-aggressive"); Submit("omc-aggressive");
             Assert.That(table.Human.Read().SessionVersion, Is.EqualTo(2));
             Assert.That(table.Human.Read().OwnStack, Is.EqualTo(92));
@@ -133,7 +145,9 @@ namespace Poker.Runtime.Tests
             var input = Root.Q<TextField>("omc-target");
             input.value = "8";
             Assert.That(Root.Q<Button>("omc-aggressive").text, Is.EqualTo("레이즈 · 총 8칩"));
-            Assert.That(Root.Q<Label>("omc-amount-hint").text, Is.EqualTo("7칩 추가"));
+            Assert.That(Root.Q<Label>("omc-amount-caption").text, Is.EqualTo("레이즈 총액"));
+            Assert.That(Root.Q<Label>("omc-amount-hint").text, Is.EqualTo("레이즈 시 7칩 추가"));
+            Assert.That(Root.Q<Button>("omc-passive").text, Is.EqualTo("콜 · 1칩 추가"), "Raise input does not change call cost.");
             foreach (string id in new[] { "omc-min", "omc-half", "omc-max" })
             {
                 Submit(id);
@@ -142,11 +156,27 @@ namespace Poker.Runtime.Tests
             }
             Assert.That(input.value, Is.EqualTo("100"));
             Assert.That(Root.Q<Button>("omc-aggressive").text, Is.EqualTo("레이즈 · 총 100칩 (올인)"));
-            Assert.That(Root.Q<Label>("omc-amount-hint").text, Is.EqualTo("99칩 추가"));
+            Assert.That(Root.Q<Label>("omc-amount-hint").text, Is.EqualTo("레이즈 시 99칩 추가"));
             yield return Resize(new Vector2Int(960, 640)); AssertLayout(); Capture("all-in-amount");
             Submit("omc-help"); Submit("omc-min");
             Assert.That(input.value, Is.EqualTo("100"), "Help blocks presets too.");
             yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator BetInputDescribesItsActionWithoutChangingCheck()
+        {
+            Submit("omc-passive");
+            Assert.That(table.AdvanceNpc(), Is.True);
+            Assert.That(table.AdvanceNpc(), Is.True);
+            screen.Render(); yield return null;
+            Assert.That(table.Human.Read().Street, Is.EqualTo(HoldemStreet.Flop));
+            Assert.That(Root.Q<Button>("omc-passive").text, Is.EqualTo("체크"));
+            Assert.That(Root.Q<Label>("omc-amount-caption").text, Is.EqualTo("베팅 금액"));
+            Root.Q<TextField>("omc-target").value = "8";
+            Assert.That(Root.Q<Label>("omc-amount-hint").text, Is.EqualTo("베팅 시 8칩 추가"));
+            Assert.That(Root.Q<Button>("omc-passive").text, Is.EqualTo("체크"));
+            yield return Resize(new Vector2Int(960, 640)); AssertLayout(); Capture("bet-input-purpose");
         }
 
         [UnityTest]
@@ -179,6 +209,7 @@ namespace Poker.Runtime.Tests
             var picked = Root.panel.Pick(passive.worldBound.center);
             Assert.That(IsDescendant(picked, passive), Is.False, "Help overlay must intercept pointer hit testing.");
             Assert.That(Root.Q<Label>("omc-help-copy").text, Is.EqualTo(HoldemTableScreen.HelpText));
+            Assert.That(Root.Q<Button>("omc-help-page-3"), Is.Null, "A local game has no remote room setup.");
             Capture("help");
             yield return Resize(new Vector2Int(960, 640));
             foreach (int page in new[] { 1, 2, 0 })
@@ -324,7 +355,7 @@ namespace Poker.Runtime.Tests
             string winner = own ? "나 승리" : "상대 승리";
             var value = own ? v.Result.OwnHandValue.Value : v.Result.OpponentHandValue.Value;
             Assert.That(Root.Q<Label>(className: "omc-result").text,
-                Is.EqualTo(winner + " · " + Poker.Presentation.KoreanPokerText.HandName(value)));
+                Is.EqualTo(winner + " · " + Poker.Presentation.KoreanPokerText.HandSummary(value)));
             Assert.That(Root.Query<Label>(className: "current").ToList(), Is.Empty);
             Assert.That(Root.Query<Label>(className: "past").ToList().Count, Is.EqualTo(4));
             yield return WaitEnabled("omc-next"); Capture("winning-showdown");
@@ -387,6 +418,12 @@ namespace Poker.Runtime.Tests
             Assert.That(Root.Q<Button>("omc-next").resolvedStyle.display, Is.EqualTo(DisplayStyle.None));
             AssertButtonHit("omc-resolve"); AssertLayout(); Capture("four-seat-odd-chip-pending");
             long version = port.Read().SessionVersion;
+            Assert.That(port.Read().Result, Is.Null);
+            Submit("omc-best-seat-3"); yield return null;
+            AssertHighlightedBest(port.Read(), new SeatId(3));
+            Assert.That(port.Read().SessionVersion, Is.EqualTo(version));
+            Assert.That(port.Read().IsSettlementPending, Is.True);
+            Assert.That(port.Read().GetSeatAt(2).Awarded, Is.Zero);
             Submit("omc-resolve"); Submit("omc-resolve");
             Assert.That(port.Read().SessionVersion, Is.EqualTo(version + 1));
             Assert.That(port.Read().IsSettlementPending, Is.False);
@@ -394,6 +431,9 @@ namespace Poker.Runtime.Tests
             Assert.That(port.Read().GetSeatAt(0).Stack, Is.EqualTo(20));
             Assert.That(port.Read().GetSeatAt(1).Stack, Is.EqualTo(8));
             Assert.That(port.Read().GetSeatAt(2).Stack, Is.EqualTo(7));
+            AssertHighlightedBest(port.Read(), new SeatId(3));
+            Assert.That(Root.Q<Button>("omc-best-seat-3").ClassListContains("selected"), Is.True,
+                "Settling the odd chip must preserve a comparison the player selected while waiting.");
             Assert.That(Root.Q<Label>(className: "omc-result").text, Is.EqualTo("팟마다 승부를 나눠 칩을 지급했어요."));
             yield return WaitEnabled("omc-pot-details"); AssertLayout(); Capture("four-seat-side-pots");
             yield return Resize(new Vector2Int(960, 640));
@@ -477,6 +517,7 @@ namespace Poker.Runtime.Tests
             yield return UnityEngine.SceneManagement.SceneManager.UnloadSceneAsync(saved);
         }
 
+#endif
         private static void PointerClick(VisualElement docRoot, Button button)
         {
             Assert.That(button.enabledInHierarchy, Is.True);
@@ -492,6 +533,7 @@ namespace Poker.Runtime.Tests
         }
 
 
+#if UNITY_EDITOR
         [UnityTest]
         public IEnumerator SavedHoldemSceneRunsProductionOpponentCompletesAndExplicitlyRestarts()
         {
@@ -506,6 +548,8 @@ namespace Poker.Runtime.Tests
                 savedDoc = saved.GetRootGameObjects().SelectMany(g => g.GetComponentsInChildren<UIDocument>()).Single();
                 var bootstrap = savedDoc.GetComponent<HoldemTableBootstrap>();
                 Assert.That(bootstrap.Settings, Is.Not.Null); Assert.That(savedDoc.panelSettings, Is.Not.Null);
+                Assert.That(bootstrap.Settings.CreateConfig().DealPolicy, Is.EqualTo(HoldemDealPolicy.Automatic));
+                Assert.That(savedDoc.rootVisualElement.Q<Button>("omc-release-deal").style.display.value, Is.EqualTo(DisplayStyle.None));
                 savedDoc.panelSettings.targetTexture = texture;
                 double deadline = Time.realtimeSinceStartupAsDouble + 35;
                 while (bootstrap.Progress.Street != HoldemStreet.Complete && Time.realtimeSinceStartupAsDouble < deadline)
@@ -590,7 +634,214 @@ namespace Poker.Runtime.Tests
             finally { if (doc != null && doc.panelSettings != null) doc.panelSettings.targetTexture = null; }
             yield return UnityEngine.SceneManagement.SceneManager.UnloadSceneAsync(saved);
         }
+        [UnityTest]
+        public IEnumerator SavedFlowPreviewKeepsHostDealingAcrossOptionsAndRestartWithoutEditingAssets()
+        {
+            screen.Dispose(); go.SetActive(false);
+            var saved = UnityEditor.SceneManagement.EditorSceneManager.LoadSceneInPlayMode(
+                "Assets/Poker/Samples/HoldemFlowPreview.unity",
+                new UnityEngine.SceneManagement.LoadSceneParameters(UnityEngine.SceneManagement.LoadSceneMode.Additive));
+            UIDocument doc = null; HoldemTableSettings copy = null;
+            RenderTexture originalTarget = null;
+            try
+            {
+                for (int i = 0; i < 5; i++) yield return null;
+                doc = saved.GetRootGameObjects().SelectMany(g => g.GetComponentsInChildren<UIDocument>()).Single();
+                originalTarget = doc.panelSettings.targetTexture; doc.panelSettings.targetTexture = texture;
+                var bootstrap = doc.GetComponent<HoldemTableBootstrap>();
+                var original = bootstrap.Settings;
+                Assert.That(original.dealPolicy, Is.EqualTo(HoldemDealPolicy.WaitForHost));
+                Assert.That(original.accusationMode, Is.EqualTo(HoldemAccusationMode.Disabled));
+                Assert.That(original.revealPolicy, Is.EqualTo(HoldemRevealPolicy.PauseAfterCommunityReveal));
+                Assert.That(bootstrap.Progress.SeatCount, Is.EqualTo(4));
+                var root = doc.rootVisualElement;
+                Assert.That(root.Q<Label>(className: "omc-subtitle").text, Is.EqualTo("개발용 진행 확인"));
+                // Only a runtime clone gets the all-in fixture; the saved preview stays a normal 100-chip table.
+                copy = UnityEngine.Object.Instantiate(original); copy.startingStack = 1; bootstrap.Settings = copy;
+                Submit(root.Q<Button>("omc-options"));
+                root.Q<DropdownField>("omc-options-seats").index = 0;
+                root.Q<Toggle>("omc-options-reveal").value = false;
+                Submit(root.Q<Button>("omc-apply-options")); yield return null;
+                Assert.That(bootstrap.Progress.SeatCount, Is.EqualTo(2));
+                Assert.That(bootstrap.Progress.IsDealPending, Is.True);
+                Assert.That(bootstrap.ActiveOptions.RevealPolicy, Is.EqualTo(HoldemRevealPolicy.Automatic));
+                long version = bootstrap.Progress.Version;
+                Submit(root.Q<Button>("omc-options"));
+                Submit(root.Q<Button>("omc-release-deal"));
+                yield return new WaitForSecondsRealtime(0.8f);
+                Assert.That(bootstrap.Progress.Version, Is.EqualTo(version));
+                Submit(root.Q<Button>("omc-cancel-options"));
+                for (int i = 0; i < 5; i++) yield return null;
+                PointerClick(root, root.Q<Button>("omc-release-deal")); Submit(root.Q<Button>("omc-release-deal"));
+                Assert.That(bootstrap.Progress.Version, Is.EqualTo(version + 1));
+                Assert.That(bootstrap.Progress.Street, Is.EqualTo(HoldemStreet.Flop));
+                Assert.That(bootstrap.Progress.IsDealPending, Is.True);
+                Assert.That(bootstrap.Progress.IsRevealPending, Is.False);
+                yield return new WaitForSecondsRealtime(0.3f);
+                Submit(root.Q<Button>("omc-reset")); Submit(root.Q<Button>("omc-confirm-reset")); yield return null;
+                Assert.That(bootstrap.Progress.Version, Is.EqualTo(1));
+                Assert.That(bootstrap.Progress.Street, Is.EqualTo(HoldemStreet.Preflop));
+                Assert.That(bootstrap.Progress.IsDealPending, Is.True);
+                Assert.That(root.Q("omc-board").Query(className: "empty").ToList().Count, Is.EqualTo(5));
+                Assert.That(original.startingStack, Is.EqualTo(100));
+                Assert.That(original.seatCount, Is.EqualTo(4));
+                Assert.That(original.revealPolicy, Is.EqualTo(HoldemRevealPolicy.PauseAfterCommunityReveal));
+                Assert.That(original.dealPolicy, Is.EqualTo(HoldemDealPolicy.WaitForHost));
+                bootstrap.Settings = original;
+            }
+            finally
+            {
+                if (doc != null && doc.panelSettings != null) doc.panelSettings.targetTexture = originalTarget;
+                foreach (var root in saved.GetRootGameObjects()) root.SetActive(false);
+                if (copy != null) UnityEngine.Object.Destroy(copy);
+            }
+            yield return UnityEngine.SceneManagement.SceneManager.UnloadSceneAsync(saved);
+        }
 #endif
+        [UnityTest]
+        public IEnumerator DealWaitHidesFutureCardsAndOnlyHostCanReleaseIt()
+        {
+            screen.Dispose();
+            table = new HoldemLocalTable(new HoldemConfig(100, 1, 2,
+                HoldemRevealPolicy.PauseAfterCommunityReveal, dealPolicy: HoldemDealPolicy.WaitForHost),
+                new FixedRandom(), new FixedRandom(), new PassivePolicy());
+            screen = new HoldemTableScreen(Root, table.Human, () => restarts++, 100,
+                Resources.Load<Font>("Fonts/NanumGothic-Regular"), resumeReveal: table.ResumeAfterReveal);
+            yield return Resize(new Vector2Int(960, 640));
+            Submit("omc-passive"); Assert.That(table.AdvanceNpc(), Is.True);
+            screen.Render(); yield return null;
+            var waiting = table.Human.Read();
+            Assert.That(waiting.IsDealPending, Is.True);
+            Assert.That(Root.Q<Label>(className: "omc-prompt").text, Is.EqualTo("딜러가 다음 공용 카드를 준비하고 있어요."));
+            Assert.That(Root.Q("omc-board").Query(className: "empty").ToList().Count, Is.EqualTo(5));
+            foreach (string id in new[] { "omc-passive", "omc-aggressive", "omc-fold", "omc-continue-reveal", "omc-release-deal" })
+            {
+                Assert.That(Root.Q<Button>(id).resolvedStyle.display, Is.EqualTo(DisplayStyle.None));
+                Submit(id);
+            }
+            Assert.That(table.Human.Read().SessionVersion, Is.EqualTo(waiting.SessionVersion));
+            Assert.That(table.AdvanceNpc(), Is.False);
+            AssertLayout(); Capture("deal-wait");
+            var deal = new HoldemDealCommand(waiting.SessionId, waiting.HandId, waiting.PendingDeal.WindowId,
+                Guid.NewGuid(), waiting.SessionVersion, waiting.PendingDeal.Street);
+            Assert.That(table.DealUnchanged(deal).Accepted, Is.True);
+            screen.Render(); yield return null;
+            Assert.That(table.Human.Read().IsRevealPending, Is.True);
+            Assert.That(Root.Q("omc-board").Query(className: "empty").ToList().Count, Is.EqualTo(2));
+            Assert.That(Root.Q<Button>("omc-continue-reveal").resolvedStyle.display, Is.Not.EqualTo(DisplayStyle.None));
+            Assert.That(Root.Q("omc-opponent-cards").Query(className: "hidden").ToList().Count, Is.EqualTo(2));
+        }
+
+        [UnityTest]
+        public IEnumerator FlowPreviewReleaseIsBlockedByModalsAndCannotDoubleDealAllInWindows()
+        {
+            screen.Dispose();
+            table = new HoldemLocalTable(new HoldemConfig(1, 1, 2, dealPolicy: HoldemDealPolicy.WaitForHost),
+                new FixedRandom(), new FixedRandom(), new PassivePolicy());
+            screen = new HoldemTableScreen(Root, table.Human, () => restarts++, 1,
+                Resources.Load<Font>("Fonts/NanumGothic-Regular"),
+                options: new HoldemTableOptions(2, 0.7f, HoldemRevealPolicy.Automatic),
+                configureTable: _ => { }, dealUnchanged: table.DealUnchanged);
+            yield return Resize(new Vector2Int(960, 640));
+            Assert.That(Root.Q<Label>(className: "omc-subtitle").text, Is.EqualTo("개발용 진행 확인"));
+            var initial = table.Human.Read();
+            Assert.That(initial.IsDealPending, Is.True);
+            foreach (var modal in new[] { new[] { "omc-help", "omc-close-help" },
+                new[] { "omc-history", "omc-close-history" }, new[] { "omc-options", "omc-cancel-options" } })
+            {
+                Submit(modal[0]);
+                Assert.That(screen.IsProgressPaused, Is.True, modal[0]);
+                Submit("omc-release-deal");
+                Assert.That(table.Human.Read().SessionVersion, Is.EqualTo(initial.SessionVersion));
+                Assert.That(table.Human.Read().PendingDeal.WindowId, Is.EqualTo(initial.PendingDeal.WindowId));
+                Submit(modal[1]); Assert.That(screen.IsProgressPaused, Is.False);
+            }
+            for (int street = 1; street <= 3; street++)
+            {
+                yield return WaitEnabled("omc-release-deal");
+                var before = table.Human.Read();
+                Assert.That(before.IsDealPending, Is.True);
+                Assert.That(before.Accusations, Is.Null);
+                AssertLayout(); AssertButtonHit("omc-release-deal");
+                // Use a real pointer hit for the host control, then immediately submit it again.
+                PointerClick(Root, Root.Q<Button>("omc-release-deal")); Submit("omc-release-deal");
+                var after = table.Human.Read();
+                Assert.That(after.SessionVersion, Is.EqualTo(before.SessionVersion + 1));
+                Assert.That(after.BoardCount, Is.EqualTo(street + 2));
+                Assert.That(after.IsDealPending, Is.EqualTo(street < 3));
+                if (street < 3) Assert.That(after.PendingDeal.WindowId, Is.Not.EqualTo(before.PendingDeal.WindowId));
+                yield return null;
+            }
+            Assert.That(table.Human.Read().Result.Kind, Is.EqualTo(HoldemResultKind.Showdown));
+            Assert.That(Root.Q<Button>("omc-release-deal").resolvedStyle.display, Is.EqualTo(DisplayStyle.None));
+        }
+
+        [UnityTest]
+        public IEnumerator FlowPreviewCompletesFourSeatHandThroughThreeDealAndRevealGates()
+        {
+            screen.Dispose();
+            table = new HoldemLocalTable(new HoldemConfig(100, 1, 2, HoldemRevealPolicy.PauseAfterCommunityReveal,
+                dealPolicy: HoldemDealPolicy.WaitForHost), 4, new FixedRandom(), new FixedRandom(),
+                new PassivePolicy(), HoldemOddChipRule.ClockwiseFromButton);
+            screen = new HoldemTableScreen(Root, table.Human, () => restarts++, 100,
+                Resources.Load<Font>("Fonts/NanumGothic-Regular"), resumeReveal: table.ResumeAfterReveal,
+                dealUnchanged: table.DealUnchanged);
+            yield return Resize(new Vector2Int(960, 640));
+            int deals = 0, reveals = 0;
+            double deadline = Time.realtimeSinceStartupAsDouble + 15;
+            while (table.Human.Read().Result == null && Time.realtimeSinceStartupAsDouble < deadline)
+            {
+                var view = table.Human.Read();
+                if (view.IsDealPending)
+                {
+                    deals++;
+                    Assert.That(view.BoardCount, Is.EqualTo(deals == 1 ? 0 : deals + 1));
+                    Assert.That(view.Accusations, Is.Null);
+                    Assert.That(table.AdvanceNpc(), Is.False);
+                    yield return WaitEnabled("omc-release-deal");
+                    Assert.That(Root.Query(className: "hidden").ToList().Count, Is.EqualTo(6));
+                    AssertLayout(); AssertButtonHit("omc-release-deal"); Capture("flow-before-" + deals);
+                    Submit("omc-release-deal"); Submit("omc-release-deal");
+                    Assert.That(table.Human.Read().SessionVersion, Is.EqualTo(view.SessionVersion + 1));
+                    Assert.That(table.Human.Read().IsRevealPending, Is.True);
+                }
+                else if (view.IsRevealPending)
+                {
+                    reveals++;
+                    yield return WaitEnabled("omc-continue-reveal");
+                    Assert.That(Root.Q<Button>("omc-release-deal").resolvedStyle.display, Is.EqualTo(DisplayStyle.None));
+                    Capture("flow-after-" + reveals); Submit("omc-continue-reveal");
+                }
+                else if (view.LegalActions == null) { table.AdvanceNpc(); screen.Render(); }
+                else if (Root.Q<Button>("omc-passive").enabledInHierarchy) Submit("omc-passive");
+                yield return null;
+            }
+            Assert.That(deals, Is.EqualTo(3)); Assert.That(reveals, Is.EqualTo(3));
+            var settled = table.Human.Read();
+            Assert.That(settled.Result.Kind, Is.EqualTo(HoldemResultKind.Showdown));
+            Assert.That(Root.Query(className: "face-card").ToList().Count, Is.EqualTo(13));
+            yield return WaitEnabled("omc-next"); Capture("flow-showdown"); Submit("omc-next"); yield return null;
+            Assert.That(table.Human.Read().HandNumber, Is.EqualTo(2));
+            Assert.That(Root.Query(className: "hidden").ToList().Count, Is.EqualTo(6));
+            Assert.That(table.Human.Read().OwnStack + table.Human.Read().OwnStreetContribution, Is.EqualTo(settled.OwnStack));
+        }
+
+        [UnityTest]
+        public IEnumerator PausedFlowPreviewDoesNotReleaseCards()
+        {
+            screen.Dispose();
+            table = new HoldemLocalTable(new HoldemConfig(1, 1, 2, dealPolicy: HoldemDealPolicy.WaitForHost),
+                new FixedRandom(), new FixedRandom(), new PassivePolicy());
+            screen = new HoldemTableScreen(Root, table.Human, () => restarts++, 1,
+                Resources.Load<Font>("Fonts/NanumGothic-Regular"), dealUnchanged: table.DealUnchanged);
+            yield return null;
+            long version = table.Human.Read().SessionVersion;
+            screen.PauseProgress(); screen.Render(); yield return null; Submit("omc-release-deal");
+            Assert.That(screen.IsProgressPaused, Is.True);
+            Assert.That(table.Human.Read().SessionVersion, Is.EqualTo(version));
+            Assert.That(Root.Q<Button>("omc-release-deal").resolvedStyle.display, Is.EqualTo(DisplayStyle.None));
+        }
+
         [UnityTest]
         public IEnumerator RevealWindowsHideBettingAndResumeOnceThroughHostButton()
         {

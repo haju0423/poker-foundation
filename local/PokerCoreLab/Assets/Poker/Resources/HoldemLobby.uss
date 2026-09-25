@@ -1,0 +1,39 @@
+.omc-multiplayer { flex-grow: 1; background-color: rgb(15, 31, 35); color: rgb(236, 236, 225); font-size: 17px; }
+.omc-room-bar { flex-direction: row; align-items: center; padding: 5px 16px; background-color: rgb(24, 43, 48); min-height: 36px; }
+.omc-room-endpoint { flex-grow: 1; font-size: 14px; }
+.omc-rematch { position: absolute; left: 0; right: 0; top: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.78); justify-content: center; align-items: center; }
+.omc-rematch-card { background-color: rgb(30, 52, 56); width: 560px; max-width: 90%; padding: 24px; }
+.omc-rematch-copy { white-space: normal; font-size: 16px; margin-bottom: 16px; }
+.omc-rematch Button { min-height: 32px; margin: 2px 5px; padding: 4px 12px; background-color: rgb(46, 78, 79); color: rgb(241, 240, 223); }
+.omc-rematch Button:disabled { background-color: rgb(34, 47, 50); color: rgb(135, 151, 148); }
+.omc-lobby { flex-grow: 1; min-height: 0; }
+.omc-lobby-content { padding: 18px 32px; align-items: center; }
+.omc-lobby-title { font-size: 32px; -unity-font-style: bold; margin-bottom: 4px; }
+.omc-lobby-subtitle { font-size: 18px; margin-bottom: 12px; }
+.omc-lobby-form { width: 560px; max-width: 100%; flex-shrink: 0; }
+.omc-lobby-form .unity-text-field { margin: 3px 0; min-height: 30px; }
+.omc-lobby-form .unity-base-field__label { min-width: 78px; }
+.omc-lobby-form .unity-base-text-field__input { background-color: rgb(235, 239, 233); color: rgb(20, 30, 34); font-size: 17px; }
+.omc-lobby-form .unity-toggle { margin: 8px 0; }
+.omc-room-setup { margin-top: 4px; margin-bottom: 4px; }
+.omc-room-setup .unity-base-field__label { min-width: 120px; }
+.omc-room-setup .unity-popup-field { margin: 3px 0; min-height: 30px; }
+.omc-room-setup .unity-base-popup-field__input { background-color: rgb(235, 239, 233); color: rgb(20, 30, 34); }
+.omc-lan-picker { flex-shrink: 0; border-left-width: 2px; border-left-color: rgb(95, 127, 121); padding-left: 10px; }
+.omc-lan-picker .unity-popup-field { min-height: 30px; }
+.omc-lan-picker .unity-base-popup-field__input { background-color: rgb(46, 78, 79); color: rgb(241, 240, 223); }
+.omc-lobby-hint { font-size: 14px; color: rgb(183, 198, 195); white-space: normal; margin: 8px 0; }
+.omc-lobby-buttons { flex-direction: row; justify-content: center; margin: 5px 0; }
+.omc-lobby Button, .omc-room-bar Button, .omc-room-confirm-card Button { min-height: 32px; min-width: 88px; margin: 3px 5px; padding: 4px 12px; background-color: rgb(46, 78, 79); color: rgb(241, 240, 223); border-color: rgb(95, 127, 121); border-width: 1px; }
+.omc-lobby Button:disabled, .omc-room-bar Button:disabled { background-color: rgb(34, 47, 50); color: rgb(135, 151, 148); }
+.omc-room-members { font-size: 18px; white-space: normal; margin: 10px 0; }
+.omc-room-share { width: 560px; max-width: 100%; flex-shrink: 0; }
+.omc-room-share-row { flex-direction: row; align-items: center; }
+.omc-room-share-address { flex-grow: 1; min-width: 0; min-height: 30px; }
+.omc-room-share-address .unity-base-field__label { min-width: 68px; }
+.omc-room-share-address .unity-base-text-field__input { background-color: rgb(235, 239, 233); color: rgb(20, 30, 34); font-size: 17px; }
+.omc-room-status { font-size: 16px; white-space: normal; margin: 7px 0; color: rgb(240, 210, 130); }
+.omc-network-table { flex-grow: 1; min-height: 0; }
+.omc-room-confirmation { position: absolute; left: 0; right: 0; top: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.78); justify-content: center; align-items: center; }
+.omc-room-confirm-card { background-color: rgb(30, 47, 51); width: 500px; max-width: 90%; padding: 24px; }
+.omc-room-confirm-copy { white-space: normal; margin-bottom: 18px; }

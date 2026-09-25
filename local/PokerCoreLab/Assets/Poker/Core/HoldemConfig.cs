@@ -7,7 +7,8 @@ namespace Poker.Foundation
     {
         public HoldemConfig(long startingStack, long smallBlind, long bigBlind,
             HoldemRevealPolicy revealPolicy = HoldemRevealPolicy.Automatic,
-            HoldemAccusationMode accusationMode = HoldemAccusationMode.Disabled)
+            HoldemAccusationMode accusationMode = HoldemAccusationMode.Disabled,
+            HoldemDealPolicy dealPolicy = HoldemDealPolicy.Automatic)
         {
             if (startingStack <= 0) throw new ArgumentOutOfRangeException(nameof(startingStack));
             if (smallBlind <= 0) throw new ArgumentOutOfRangeException(nameof(smallBlind));
@@ -18,11 +19,14 @@ namespace Poker.Foundation
                 throw new ArgumentOutOfRangeException(nameof(accusationMode));
             if (accusationMode != HoldemAccusationMode.Disabled && revealPolicy != HoldemRevealPolicy.PauseAfterCommunityReveal)
                 throw new ArgumentException("Accusation input requires community-card reveal windows.", nameof(accusationMode));
+            if (dealPolicy != HoldemDealPolicy.Automatic && dealPolicy != HoldemDealPolicy.WaitForHost)
+                throw new ArgumentOutOfRangeException(nameof(dealPolicy));
             StartingStack = startingStack;
             SmallBlind = smallBlind;
             BigBlind = bigBlind;
             RevealPolicy = revealPolicy;
             AccusationMode = accusationMode;
+            DealPolicy = dealPolicy;
         }
 
         public long StartingStack { get; }
@@ -30,6 +34,13 @@ namespace Poker.Foundation
         public long BigBlind { get; }
         public HoldemRevealPolicy RevealPolicy { get; }
         public HoldemAccusationMode AccusationMode { get; }
+        public HoldemDealPolicy DealPolicy { get; }
+    }
+
+    public enum HoldemDealPolicy
+    {
+        Automatic = 0,
+        WaitForHost = 1
     }
 
     public enum HoldemAccusationMode

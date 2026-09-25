@@ -6,13 +6,19 @@ namespace Poker.Foundation.Tests
 {
     public sealed class HoldemSessionSimulationTests
     {
-        [TestCase(2, HoldemRevealPolicy.Automatic)]
-        [TestCase(3, HoldemRevealPolicy.Automatic)]
-        [TestCase(4, HoldemRevealPolicy.Automatic)]
-        [TestCase(2, HoldemRevealPolicy.PauseAfterCommunityReveal)]
-        [TestCase(3, HoldemRevealPolicy.PauseAfterCommunityReveal)]
-        [TestCase(4, HoldemRevealPolicy.PauseAfterCommunityReveal)]
-        public void SeededSessionsPreserveChipsCardsAndPrivacyAcrossHands(int seatCount, HoldemRevealPolicy policy)
+        [TestCase(2, HoldemRevealPolicy.Automatic, HoldemDealPolicy.Automatic)]
+        [TestCase(3, HoldemRevealPolicy.Automatic, HoldemDealPolicy.Automatic)]
+        [TestCase(4, HoldemRevealPolicy.Automatic, HoldemDealPolicy.Automatic)]
+        [TestCase(2, HoldemRevealPolicy.PauseAfterCommunityReveal, HoldemDealPolicy.Automatic)]
+        [TestCase(3, HoldemRevealPolicy.PauseAfterCommunityReveal, HoldemDealPolicy.Automatic)]
+        [TestCase(4, HoldemRevealPolicy.PauseAfterCommunityReveal, HoldemDealPolicy.Automatic)]
+        [TestCase(2, HoldemRevealPolicy.Automatic, HoldemDealPolicy.WaitForHost)]
+        [TestCase(3, HoldemRevealPolicy.Automatic, HoldemDealPolicy.WaitForHost)]
+        [TestCase(4, HoldemRevealPolicy.Automatic, HoldemDealPolicy.WaitForHost)]
+        [TestCase(2, HoldemRevealPolicy.PauseAfterCommunityReveal, HoldemDealPolicy.WaitForHost)]
+        [TestCase(3, HoldemRevealPolicy.PauseAfterCommunityReveal, HoldemDealPolicy.WaitForHost)]
+        [TestCase(4, HoldemRevealPolicy.PauseAfterCommunityReveal, HoldemDealPolicy.WaitForHost)]
+        public void SeededSessionsPreserveChipsCardsAndPrivacyAcrossHands(int seatCount, HoldemRevealPolicy policy, HoldemDealPolicy dealPolicy)
         {
             int completedHands = 0, decisionsMade = 0, eliminated = 0;
             for (int seed = 0; seed < 200; seed++)
@@ -29,12 +35,12 @@ namespace Poker.Foundation.Tests
                     entries[i] = new SeatChips(seats[i], priorStacks[i]); total += priorStacks[i];
                 }
                 int id = 1;
-                var session = new HoldemSession(Id(id++), new HoldemConfig(100, 1, 2, policy),
+                var session = new HoldemSession(Id(id++), new HoldemConfig(100, 1, 2, policy, dealPolicy: dealPolicy),
                     ChipLedger.Create(entries), seats, seats[seed % seatCount], new SeededRandom(seed),
                     HoldemOddChipRule.ClockwiseFromButton);
                 for (int hand = 0; hand < 30 && session.CanContinue; hand++)
                 {
-                    string context = "seats=" + seatCount + " policy=" + policy + " seed=" + seed + " hand=" + hand;
+                    string context = "seats=" + seatCount + " policy=" + policy + " deal=" + dealPolicy + " seed=" + seed + " hand=" + hand;
                     Assert.That(session.StartNextHand(Id(id++), Id(id++), session.Version).Accepted, Is.True, context);
                     var view = session.GetSnapshot(seats[0]);
                     for (int i = 0; i < seatCount; i++)
@@ -52,6 +58,16 @@ namespace Poker.Foundation.Tests
                         view = session.GetSnapshot(seats[0]);
                         if (view.Result != null) break;
                         Assert.That(++steps, Is.LessThanOrEqualTo(256), context + " hand did not finish");
+                        if (view.IsDealPending)
+                        {
+                            var dealCommand = new HoldemDealCommand(view.SessionId, view.HandId, view.PendingDeal.WindowId,
+                                Id(id++), view.SessionVersion, view.PendingDeal.Street);
+                            var dealReceipt = session.DealUnchanged(dealCommand);
+                            Assert.That(dealReceipt.Accepted, Is.True, context);
+                            Assert.That(session.DealUnchanged(dealCommand), Is.SameAs(dealReceipt), context);
+                            Assert.That(session.Version, Is.EqualTo(view.SessionVersion + 1), context);
+                            continue;
+                        }
                         if (view.IsRevealPending)
                         {
                             Assert.That(session.ResumeAfterReveal(new HoldemRevealCommand(view.SessionId, view.HandId,
@@ -88,7 +104,7 @@ namespace Poker.Foundation.Tests
                         Assert.That(view.GetSeat(session.SessionWinnerSeat.Value).Stack, Is.EqualTo(total), context);
                 }
             }
-            TestContext.WriteLine("Sessions=200 seats=" + seatCount + " policy=" + policy + " hands=" + completedHands
+            TestContext.WriteLine("Sessions=200 seats=" + seatCount + " policy=" + policy + " deal=" + dealPolicy + " hands=" + completedHands
                 + " actions=" + decisionsMade + " eliminations=" + eliminated);
         }
 
@@ -107,6 +123,14 @@ namespace Poker.Foundation.Tests
                 Assert.That(own.Stack, Is.GreaterThanOrEqualTo(0), context);
                 Assert.That(own.Committed, Is.GreaterThanOrEqualTo(0), context);
                 Assert.That(view.SessionVersion, Is.EqualTo(baseline.SessionVersion), context);
+                if (view.IsDealPending)
+                {
+                    Assert.That(view.CurrentSeat, Is.Null, context);
+                    Assert.That(view.LegalActions, Is.Null, context);
+                    Assert.That(view.IsRevealPending, Is.False, context);
+                    Assert.That(view.Accusations, Is.Null, context);
+                    Assert.That(view.PendingDeal, Is.SameAs(baseline.PendingDeal), context);
+                }
                 Assert.That(view.BoardCount, Is.EqualTo(baseline.BoardCount), context);
                 for (int i = 0; i < view.BoardCount; i++)
                     Assert.That(view.GetBoardCard(i), Is.EqualTo(baseline.GetBoardCard(i)), context);

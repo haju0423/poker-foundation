@@ -1,39 +1,73 @@
 # One More Card
 
-NPC 1~3명과 플레이하는 텍사스 홀덤 게임입니다. 기본은 4인 테이블입니다.
+텍사스 홀덤 게임입니다. NPC와 혼자 플레이하거나, 같은 네트워크에서 3~4명이 함께 플레이할 수 있습니다.
 
 ## 다운로드
 
-- [Windows](https://github.com/haju0423/poker-foundation/releases/download/2026.09.21-holdem-history/OneMoreCard-Windows.zip)
-- [Mac](https://github.com/haju0423/poker-foundation/releases/download/2026.09.21-holdem-history/OneMoreCard-macOS.zip)
+| 실행 방식 | Windows | Mac |
+|---|---|---|
+| 혼자 하기 · NPC 상대 | [다운로드](https://github.com/haju0423/poker-foundation/releases/download/2026.09.25-multiplayer/OneMoreCard-Solo-Windows.zip) | [다운로드](https://github.com/haju0423/poker-foundation/releases/download/2026.09.25-multiplayer/OneMoreCard-Solo-Mac.zip) |
+| 멀티 · 3~4인 | [다운로드](https://github.com/haju0423/poker-foundation/releases/download/2026.09.25-multiplayer/OneMoreCard-Multiplayer-Windows.zip) | [다운로드](https://github.com/haju0423/poker-foundation/releases/download/2026.09.25-multiplayer/OneMoreCard-Multiplayer-Mac.zip) |
 
-Windows는 압축을 모두 풀고 `One More Card.exe`를 실행합니다. 같은 폴더의 다른 파일도 함께 있어야 합니다.
-Mac은 압축을 풀고 `One More Card.app`을 실행합니다.
+Windows는 압축을 모두 풀고 폴더 안의 `.exe`를 실행합니다. 실행파일만 따로 옮기지 말고 나머지 파일도 함께 둡니다. Mac은 압축을 풀고 `.app`을 실행합니다.
 
-## 플레이 방법
+## 혼자 하기
+
+실행하면 나와 NPC 3명이 바로 게임을 시작합니다. 사람을 모으지 않고 베팅·정산·화면 동작을 확인할 때 사용할 수 있습니다.
+
+- **새 게임 설정**에서 참가 인원(나 포함 2~4명), 상대 행동 속도, 공용 카드 공개 후 멈춤을 바꿀 수 있습니다.
+- **적용하고 새 게임**은 현재 판과 보유 칩을 초기화합니다.
+- **공용 카드 공개 후 잠시 멈추기**를 켜면 플랍·턴·리버를 보고 **계속**을 눌러 진행합니다.
+
+## 함께 하기
+
+모두 같은 버전의 멀티 실행파일을 사용합니다. 현재 연결 방식은 **같은 공유기·사설망 안에서 사용하는 방식**입니다. 서로 다른 집에서 공인 IP나 초대 코드로 접속하는 방식은 지원하지 않습니다.
+
+### 방장
+
+1. 이름을 입력하고 **신뢰하는 같은 네트워크에서 연결**을 켭니다.
+2. **내 IP**에서 같은 네트워크에 연결된 주소를 선택한 뒤 **내 IP 사용**을 누릅니다.
+3. 방 설정에서 **3인 / 4인**, 시작 칩과 블라인드를 정하고 **방 만들기**를 누릅니다.
+4. 대기실의 **주소 복사**로 `IP:포트`를 참가자에게 전달합니다.
+
+### 참가자
+
+1. 이름을 입력하고 **신뢰하는 같은 네트워크에서 연결**을 켭니다.
+2. 받은 주소를 **IP / 방 주소**에 붙여넣고 **참가하기**를 누릅니다.
+3. 정해진 인원이 모두 들어오면 전원이 **준비**를 누릅니다. 방장이 **게임 시작**을 누르면 시작합니다.
+
+`127.0.0.1`은 같은 컴퓨터 안에서만 쓰는 주소입니다. 다른 컴퓨터로 접속할 때는 방장의 사설 IP를 사용합니다. 같은 와이파이여도 게스트망·학교망에서 기기 간 통신을 막으면 접속되지 않을 수 있습니다.
+
+- 판이 끝나면 방장이 **다음 판**을 눌러 현재 칩으로 이어갑니다.
+- 연결이 끊기면 **다시 연결**로 같은 자리에 돌아올 수 있습니다. 이때 앱을 닫거나 방에서 나가지 않고 기존 연결 정보를 유지합니다. 방장이 방을 닫으면 경기를 이어갈 수 없습니다.
+- 한 경기 종료 후 **한 경기 더**에서 전원이 다시 준비하고 방장이 **새 경기 시작**을 누르면 같은 방에서 시작 칩으로 다시 플레이합니다.
+- **멘트**에 입력한 원문은 모두에게 보이며 **이번 판 기록**에서 다시 읽을 수 있습니다. 프리플랍·플랍·턴의 베팅 단계마다 한 번 보낼 수 있고, 현재 실행본에서는 카드나 판정에 영향을 주지 않습니다.
+
+## 기본 조작
 
 내 카드 2장과 공용 카드 5장 중 가장 좋은 5장으로 승부합니다.
 
 - 체크·콜·베팅·레이즈·폴드 버튼으로 진행합니다.
 - 베팅·레이즈 금액은 이번 베팅 라운드에 낼 총액입니다.
 - 쇼다운에서 남은 참가자의 패와 승자를 볼 수 있습니다.
-- **다음 판**은 현재 보유 칩으로 이어지며 블라인드를 새로 냅니다. **새 게임**은 현재 판과 칩을 초기화합니다.
-- **새 게임 설정**에서 참가 인원과 상대 행동 속도를 바꿀 수 있습니다. 설정을 적용하면 새 게임을 시작합니다.
-- **공용 카드 공개 후 잠시 멈추기**를 켜면 플랍·턴·리버 공개 때 멈춥니다. 카드를 보고 **계속**을 누르면 됩니다.
+- **다음 판**은 현재 보유 칩으로 이어지며 블라인드를 새로 냅니다. 혼자 하기의 **새 게임**은 현재 판과 칩을 초기화합니다.
 - 결과 화면의 **분배 내역**에서 각 팟을 누가 받았는지 확인하고, 쇼다운에서 공개된 패의 숫자를 비교할 수 있습니다.
 - 상단의 **이번 판 기록**에서 단계별 행동과 낸 칩, 돌려받은 칩을 확인할 수 있습니다. 다음 판을 시작하면 기록이 새로 쌓입니다.
 
 ## 프로젝트 실행
 
-Unity 6000.3.23f1에서 [프로젝트 폴더](local/PokerCoreLab)를 열고,
-[HoldemTable.unity](local/PokerCoreLab/Assets/Poker/Samples/HoldemTable.unity) 장면을 실행합니다.
+Unity 6000.3.23f1에서 [프로젝트 폴더](local/PokerCoreLab)를 열고 원하는 장면을 실행합니다.
+
+- 혼자 하기: [HoldemTable.unity](local/PokerCoreLab/Assets/Poker/Samples/HoldemTable.unity)
+- 멀티: [HoldemMultiplayer.unity](local/PokerCoreLab/Assets/Poker/Samples/HoldemMultiplayer.unity)
 
 ## 코드 구성
 
 `Assets/Poker` 아래에 기능별로 나뉘어 있습니다.
 
 - `Core`: 카드·족보·베팅·팟 정산·게임 진행
-- `Application`: 로컬 테이블·NPC 행동·판 기록
+- `Application`: 로컬 테이블·NPC 행동·멀티 방·멘트·판 기록
+- `Transport`: 방 접속과 상태 전달
 - `Presentation`: 문구
 - `Runtime`: 게임 화면과 입력 처리
 - `Editor`: 장면 구성과 Windows·Mac 빌드

@@ -1,7 +1,7 @@
 {
   "name": "Poker.Core.Tests",
   "rootNamespace": "Poker.Foundation.Tests",
-  "references": ["Poker.Core", "Poker.Presentation", "Poker.Application"],
+  "references": ["Poker.Core", "Poker.Presentation", "Poker.Application", "Poker.Transport"],
   "includePlatforms": ["Editor"],
   "optionalUnityReferences": ["TestAssemblies"],
   "autoReferenced": false

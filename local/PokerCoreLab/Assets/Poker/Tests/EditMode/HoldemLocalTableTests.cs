@@ -30,6 +30,7 @@ namespace Poker.Foundation.Tests
             Assert.That(table.Human.Submit(command).Accepted, Is.True);
             var notice = table.Human.LastAction;
             Assert.That(notice.Paid, Is.EqualTo(1));
+            Assert.That(notice.Street, Is.EqualTo(HoldemStreet.Preflop));
             Assert.That(table.Human.Submit(command).Accepted, Is.True);
             Assert.That(table.Human.LastAction, Is.SameAs(notice));
             Assert.That(table.Human.Read().OwnStack, Is.EqualTo(98));

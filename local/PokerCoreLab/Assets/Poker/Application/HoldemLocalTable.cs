@@ -20,12 +20,13 @@ namespace Poker.Application
 
     public sealed class HoldemActionNotice
     {
-        internal HoldemActionNotice(SeatId seat, BettingAction action, long paid)
-        { Seat = seat; Kind = action.Kind; Paid = paid; Target = action.Target; }
+        internal HoldemActionNotice(SeatId seat, BettingAction action, long paid, HoldemStreet street)
+        { Seat = seat; Kind = action.Kind; Paid = paid; Target = action.Target; Street = street; }
         public SeatId Seat { get; }
         public BettingActionKind Kind { get; }
         public long Paid { get; }
         public long Target { get; }
+        public HoldemStreet Street { get; }
     }
 
     /// <summary>Trusted single-player host. UI receives a bound human port, never the session or opponent view.</summary>
@@ -39,6 +40,7 @@ namespace Poker.Application
         private readonly HoldemConfig config;
         private readonly List<HoldemHistoryEntry> history = new List<HoldemHistoryEntry>();
         private HoldemHandHistory historySnapshot;
+        private readonly HoldemUtteranceInbox utterances;
 
         public HoldemLocalTable(HoldemConfig config, IRandomSource deckRandom,
             IRandomSource opponentRandom, IHoldemOpponentPolicy opponent = null)
@@ -46,7 +48,8 @@ namespace Poker.Application
 
         public HoldemLocalTable(HoldemConfig config, int seatCount, IRandomSource deckRandom,
             IRandomSource opponentRandom, IHoldemOpponentPolicy opponent = null,
-            HoldemOddChipRule oddChipRule = HoldemOddChipRule.RequireExplicitPriority)
+            HoldemOddChipRule oddChipRule = HoldemOddChipRule.RequireExplicitPriority,
+            HoldemUtterancePolicy utterancePolicy = null)
         {
             if (seatCount < 2 || seatCount > 4) throw new ArgumentOutOfRangeException(nameof(seatCount));
             this.config = config ?? throw new ArgumentNullException(nameof(config));
@@ -58,9 +61,29 @@ namespace Poker.Application
             HoldemReceipt start = session.StartNextHand(Guid.NewGuid(), Guid.NewGuid(), 0);
             if (!start.Accepted) throw new InvalidOperationException("Could not start the local Hold'em table.");
             Human = new HumanPort(this);
+            if (utterancePolicy != null)
+            {
+                utterances = new HoldemUtteranceInbox(() => Human.Read(), utterancePolicy);
+                HumanUtterances = utterances.Bind(humanSeat);
+            }
             StartHistory(null);
         }
         public IHoldemPlayerPort Human { get; }
+        public IHoldemUtterancePlayerPort HumanUtterances { get; }
+
+        // Host-only, current-hand batches. A downstream consumer keeps its immutable copies before NextHand.
+        public IReadOnlyList<HoldemUtteranceBatch> ReadClosedUtteranceBatches()
+            => utterances == null ? Array.Empty<HoldemUtteranceBatch>() : utterances.ReadClosedBatches();
+
+        // Host-only neutral handoff; absent from the seat-bound player port.
+        public HoldemReceipt DealUnchanged(HoldemDealCommand command)
+        {
+            var before = Human.Read();
+            var receipt = session.DealUnchanged(command);
+            if (receipt.Accepted && receipt.Version > before.SessionVersion)
+                RecordReturns(before, Human.Read(), null, 0);
+            return receipt;
+        }
 
         // A local-host control, deliberately absent from IHoldemPlayerPort.
         public HoldemReceipt ResumeAfterReveal(HoldemRevealCommand command)
@@ -132,7 +155,7 @@ namespace Poker.Application
                 long paid = command.Action.Kind == BettingActionKind.Call ? before.LegalActions.CallAmount
                     : command.Action.Kind == BettingActionKind.BetTo || command.Action.Kind == BettingActionKind.RaiseTo
                     ? command.Action.Target - before.OwnStreetContribution : 0;
-                lastAction = new HoldemActionNotice(authorizedSeat, command.Action, paid);
+                lastAction = new HoldemActionNotice(authorizedSeat, command.Action, paid, before.Street);
                 history.Add(new HoldemHistoryEntry(HoldemHistoryKind.Action, before.Street, authorizedSeat,
                     command.Action.Kind, paid, before.OwnStreetContribution + paid, paid > 0 && paid == before.OwnStack));
                 RecordReturns(before, session.GetSnapshot(authorizedSeat), authorizedSeat, paid);
@@ -173,6 +196,7 @@ namespace Poker.Application
                 long returned = seat.Stack - old.Stack + (seat.Seat == actor ? paid : 0) - (seat.Awarded - old.Awarded);
                 AddReturn(before.Street, seat.Seat, returned);
             }
+            utterances?.Synchronize();
         }
 
         private void AddReturn(HoldemStreet street, SeatId seat, long amount)
@@ -214,7 +238,10 @@ namespace Poker.Application
             {
                 var previous = Read();
                 HoldemReceipt receipt = table.session.StartNextHand(Guid.NewGuid(), Guid.NewGuid(), expectedVersion);
-                if (receipt.Accepted) { table.lastAction = null; table.StartHistory(previous); }
+                if (receipt.Accepted)
+                {
+                    table.lastAction = null; table.StartHistory(previous); table.utterances?.Synchronize();
+                }
                 return receipt;
             }
         }

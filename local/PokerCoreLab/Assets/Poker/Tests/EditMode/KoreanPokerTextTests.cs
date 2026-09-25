@@ -65,6 +65,31 @@ namespace Poker.Foundation.Tests
             if (expected.StartsWith("로열")) Assert.That(value.Category, Is.EqualTo(HandCategory.StraightFlush));
         }
 
+        [TestCase("Ac Kd Qh 9s 7c", "하이 카드 A")]
+        [TestCase("6c 6d Ah Qs Tc", "원페어 6")]
+        [TestCase("Ac Ad Qh Qs 7c", "투페어 A·Q")]
+        [TestCase("Ac Ad Ah 9s 7c", "트리플 A")]
+        [TestCase("Ac 2d 3h 4s 5c", "스트레이트 5")]
+        [TestCase("Ac Kc Qc 9c 7c", "플러시 A")]
+        [TestCase("Qc Qd Qh 7s 7c", "풀하우스 Q·7")]
+        [TestCase("Ac Ad Ah As 7c", "포카드 A")]
+        [TestCase("9c Tc Jc Qc Kc", "스트레이트 플러시 K")]
+        [TestCase("Tc Jc Qc Kc Ac", "로열 스트레이트 플러시")]
+        public void CompactHandSummaryUsesMainRanksButDoesNotReplaceFullComparison(string cards, string expected) =>
+            Assert.That(KoreanPokerText.HandSummary(HandEvaluator.Evaluate(Parse(cards))), Is.EqualTo(expected));
+
+        [Test]
+        public void EqualCompactPairLabelsCanStillHaveDifferentKickers()
+        {
+            var stronger = HandEvaluator.Evaluate(Parse("6c 6d Ah Ks Tc"));
+            var weaker = HandEvaluator.Evaluate(Parse("6c 6d Ah Qs Tc"));
+            Assert.That(stronger.CompareTo(weaker), Is.GreaterThan(0));
+            Assert.That(KoreanPokerText.HandSummary(stronger), Is.EqualTo(KoreanPokerText.HandSummary(weaker)));
+            Assert.That(KoreanPokerText.HandDescription(stronger), Is.EqualTo("원페어 6 · 남은 카드 A·K·10"));
+            Assert.That(KoreanPokerText.HandDescription(weaker), Is.EqualTo("원페어 6 · 남은 카드 A·Q·10"));
+            Assert.Throws<ArgumentException>(() => KoreanPokerText.HandSummary(default));
+        }
+
         [TestCase("Ac Kd Qh 9s 7c", "하이 카드 · A·K·Q·9·7")]
         [TestCase("Ac Ad Qh 9s 7c", "원페어 A · 남은 카드 Q·9·7")]
         [TestCase("Ac Ad Qh Qs 7c", "투페어 A·Q · 남은 카드 7")]
@@ -98,6 +123,35 @@ namespace Poker.Foundation.Tests
                 Assert.That(CultureInfo.CurrentCulture.Name, Is.EqualTo("de-DE"));
             }
             finally { CultureInfo.CurrentCulture = original; }
+        }
+
+        [TestCase(false, false, false)]
+        [TestCase(true, false, true)]
+        [TestCase(false, true, true)]
+        [TestCase(true, true, true)]
+        public void RoomDescriptionUsesOnlyTheCapturedRules(bool dealGate, bool revealGate, bool speech)
+        {
+            var rules = new Poker.Application.HoldemRoomRules(new HoldemConfig(250, 5, 10,
+                revealGate ? HoldemRevealPolicy.PauseAfterCommunityReveal : HoldemRevealPolicy.Automatic,
+                dealPolicy: dealGate ? HoldemDealPolicy.WaitForHost : HoldemDealPolicy.Automatic), speech);
+            string text = KoreanPokerText.RoomSettingsDescription(rules);
+            Assert.That(text, Does.StartWith("방 인원: 4인\n시작 칩: 250칩\n스몰 블라인드: 5칩\n빅 블라인드: 10칩"));
+            Assert.That(text, Does.Contain("공용 카드: " + (dealGate ? "방장이 공개" : "자동 공개")));
+            Assert.That(text, Does.Contain("카드 공개 후: " + (revealGate ? "확인 후 방장이 계속" : "별도 확인 없이 계속")));
+            Assert.That(text, Does.Contain(speech ? "접수 확인용" : "멘트: 사용 안 함"));
+            Assert.That(text, Does.Contain("현재 보유 칩으로 이어져요"));
+        }
+
+        [Test]
+        public void MissingRoomDescriptionDoesNotInventDefaultsAndLargeAmountsStayExact()
+        {
+            string missing = KoreanPokerText.RoomSettingsDescription(null);
+            Assert.That(missing, Does.Contain("방장에게 확인"));
+            Assert.That(missing, Does.Not.Contain("100").And.Not.Contain("자동 공개"));
+            var rules = new Poker.Application.HoldemRoomRules(new HoldemConfig(long.MaxValue / 4, 1, long.MaxValue), false);
+            string text = KoreanPokerText.RoomSettingsDescription(rules);
+            Assert.That(text, Does.Contain("시작 칩: 2,305,843,009,213,693,951칩"));
+            Assert.That(text, Does.Contain("빅 블라인드: 9,223,372,036,854,775,807칩"));
         }
 
         [TestCase(-1L)]

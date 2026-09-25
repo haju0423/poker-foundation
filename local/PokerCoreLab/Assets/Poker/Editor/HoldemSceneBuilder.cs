@@ -52,6 +52,12 @@ namespace Poker.Editor
         }
         public static void Build() => BuildPlayer(BuildTarget.StandaloneOSX, BuildOptions.None);
         public static void BuildWindows() => BuildPlayer(BuildTarget.StandaloneWindows64, BuildOptions.None);
+        public static void BuildFlowPreview() => BuildPlayer(BuildTarget.StandaloneOSX, BuildOptions.None, true);
+        public static void BuildFlowPreviewWindows() => BuildPlayer(BuildTarget.StandaloneWindows64, BuildOptions.None, true);
+        public static void BuildMultiplayer() => BuildPlayer(BuildTarget.StandaloneOSX, BuildOptions.None, multiplayer: true);
+        public static void BuildMultiplayerWindows() => BuildPlayer(BuildTarget.StandaloneWindows64, BuildOptions.None, multiplayer: true);
+        public static void BuildMultiplayerFlowPreview() => BuildPlayer(BuildTarget.StandaloneOSX, BuildOptions.None, true, true);
+        public static void BuildMultiplayerFlowPreviewWindows() => BuildPlayer(BuildTarget.StandaloneWindows64, BuildOptions.None, true, true);
         public static void ConfigureFourSeatSample()
         {
             Create();
@@ -78,7 +84,7 @@ namespace Poker.Editor
             }
             Validate();
         }
-        private static void BuildPlayer(BuildTarget target, BuildOptions options)
+        private static void BuildPlayer(BuildTarget target, BuildOptions options, bool flowPreview = false, bool multiplayer = false)
         {
             string path = Argument("-buildOutput");
             string extension = target == BuildTarget.StandaloneOSX ? ".app" : ".exe";
@@ -86,25 +92,34 @@ namespace Poker.Editor
                 throw new ArgumentException("An explicit build output ending with " + extension + " is required.");
             if (!BuildPipeline.IsBuildTargetSupported(BuildTargetGroup.Standalone, target))
                 throw new InvalidOperationException("Matching desktop build support is unavailable.");
-            Create();
+            HoldemBuildNotices.ValidateSource(UnityEngine.Application.dataPath);
+            if (multiplayer && flowPreview) HoldemMultiplayerSceneBuilder.CreateFlowPreview();
+            else if (multiplayer) HoldemMultiplayerSceneBuilder.Create();
+            else if (flowPreview) HoldemFlowPreviewBuilder.Create();
+            else Create();
             string product = PlayerSettings.productName;
             FullScreenMode mode = PlayerSettings.fullScreenMode;
             int width = PlayerSettings.defaultScreenWidth, height = PlayerSettings.defaultScreenHeight;
             bool resizable = PlayerSettings.resizableWindow;
+            bool runInBackground = PlayerSettings.runInBackground;
             string[] oldArgs = PlayerSettings.GetAdditionalCompilerArguments(NamedBuildTarget.Standalone);
             BuildReport report;
             try
             {
-                PlayerSettings.productName = "One More Card";
+                PlayerSettings.productName = multiplayer ? (flowPreview ? "One More Card - Multiplayer Flow Preview" : "One More Card - Multiplayer")
+                    : flowPreview ? "One More Card - Flow Preview" : "One More Card";
                 PlayerSettings.fullScreenMode = FullScreenMode.Windowed;
                 PlayerSettings.defaultScreenWidth = 1200; PlayerSettings.defaultScreenHeight = 800;
                 PlayerSettings.resizableWindow = true;
+                if (multiplayer) PlayerSettings.runInBackground = true;
                 string projectRoot = Path.GetDirectoryName(UnityEngine.Application.dataPath).Replace('\\', '/');
                 var args = new List<string>(oldArgs ?? Array.Empty<string>());
                 args.Add("-pathmap:\"" + projectRoot + "=/_/Poker\"");
                 PlayerSettings.SetAdditionalCompilerArguments(NamedBuildTarget.Standalone, args.ToArray());
                 report = BuildPipeline.BuildPlayer(new BuildPlayerOptions {
-                    scenes = new[] { ScenePath }, locationPathName = Path.GetFullPath(path), target = target, options = options
+                    scenes = new[] { multiplayer ? (flowPreview ? HoldemMultiplayerSceneBuilder.FlowScenePath : HoldemMultiplayerSceneBuilder.ScenePath)
+                        : flowPreview ? HoldemFlowPreviewBuilder.ScenePath : ScenePath },
+                    locationPathName = Path.GetFullPath(path), target = target, options = options
                 });
             }
             finally
@@ -113,8 +128,10 @@ namespace Poker.Editor
                 PlayerSettings.productName = product; PlayerSettings.fullScreenMode = mode;
                 PlayerSettings.defaultScreenWidth = width; PlayerSettings.defaultScreenHeight = height;
                 PlayerSettings.resizableWindow = resizable;
+                PlayerSettings.runInBackground = runInBackground;
             }
             if (report.summary.result != BuildResult.Succeeded) throw new InvalidOperationException("Hold'em build failed.");
+            HoldemBuildNotices.ValidatePlayer(UnityEngine.Application.dataPath, target, Path.GetFullPath(path));
             File.Copy("Assets/Poker/Resources/Fonts/OFL.txt", Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path)), "FONT-LICENSE.txt"), true);
             Debug.Log("OMC_HOLDEM_BUILD_READY");
         }

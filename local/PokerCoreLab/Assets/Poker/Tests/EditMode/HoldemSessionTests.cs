@@ -137,8 +137,12 @@ namespace Poker.Foundation.Tests
             var session = new HoldemSession(Guid.NewGuid(), new HoldemConfig(2, 1, 2),
                 Human, Npc, new PrefixRandom(prefix));
             Start(session);
+            Assert.That(session.GetSnapshot(Npc).OwnStack, Is.Zero);
+            Assert.That(session.IsEliminatedAfterSettlement(Npc), Is.False, "Posting the last chips as a blind is not elimination.");
             Submit(session, Human, BettingAction.Call());
             Assert.That(session.IsOver, Is.True);
+            Assert.That(session.IsEliminatedAfterSettlement(Npc), Is.True);
+            Assert.That(session.IsEliminatedAfterSettlement(Human), Is.False);
             Assert.That(session.CanContinue, Is.False);
             Assert.That(session.BustedSeat, Is.EqualTo(Npc));
             HoldemSnapshot final = session.GetSnapshot(Human);
