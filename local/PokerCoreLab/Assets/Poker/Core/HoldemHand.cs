@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace Poker.Foundation
 {
     /// <summary>Immutable authority state for one two-to-four-seat Hold'em hand.</summary>
-    public sealed class HoldemHand
+    public sealed partial class HoldemHand
     {
         private readonly SeatId[] seats;
         private readonly Card[][] holeCards;

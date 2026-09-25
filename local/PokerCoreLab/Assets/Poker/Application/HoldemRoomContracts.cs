@@ -116,11 +116,11 @@ namespace Poker.Application
             HoldemRoomMemberView[] ownedMembers, HoldemSnapshot game, HoldemActionNotice lastAction,
             HoldemActionNotice[] ownedStreetActions, HoldemUtteranceView ownUtterances = null, HoldemRoomRules rules = null,
             HoldemHandHistory history = null, HoldemPublicUtterances publicUtterances = null,
-            long matchNumber = 1, bool rematchSupported = false)
+            long matchNumber = 1, bool rematchSupported = false, HoldemOwnCardChange ownCardChange = null)
         { SessionId = sessionId; Revision = revision; ViewerSeat = viewer; Paused = paused;
             members = ownedMembers; Game = game; LastAction = lastAction; streetActions = ownedStreetActions;
             OwnUtterances = ownUtterances; Rules = rules; History = history; PublicUtterances = publicUtterances;
-            MatchNumber = matchNumber; RematchSupported = rematchSupported; }
+            MatchNumber = matchNumber; RematchSupported = rematchSupported; OwnCardChange = ownCardChange; }
         public Guid SessionId { get; }
         public long Revision { get; }
         public SeatId ViewerSeat { get; }
@@ -129,6 +129,7 @@ namespace Poker.Application
         public HoldemActionNotice LastAction { get; }
         public HoldemUtteranceView OwnUtterances { get; }
         public HoldemPublicUtterances PublicUtterances { get; }
+        public HoldemOwnCardChange OwnCardChange { get; }
         public HoldemRoomRules Rules { get; }
         public HoldemHandHistory History { get; }
         public long MatchNumber { get; }

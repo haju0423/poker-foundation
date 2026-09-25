@@ -5,6 +5,17 @@ namespace Poker.Application
 {
     public sealed partial class HoldemRoom
     {
+        /// <summary>Host-process only. Never expose selected cards or this command on a player wire.</summary>
+        public HoldemRoomReceipt ApplyDealerDeal(Guid hostConnection, HoldemDealCommand command)
+        {
+            if (command == null) throw new ArgumentNullException(nameof(command));
+            return HostOperation(hostConnection, () =>
+                (command.CardChange != null && !RetainsDealerInput)
+                    || !HoldemDealerSourceValidation.Matches(command, utterances?.ReadClosedBatches())
+                    ? command.RejectCardChange()
+                    : session.ApplyDealerDeal(command));
+        }
+
         /// <summary>Read the current deal and its preceding raw input atomically, without consuming either.</summary>
         public HoldemDealerTurnRead ReadPendingDealerTurn(Guid hostConnection)
         {

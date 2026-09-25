@@ -15,6 +15,7 @@ namespace Poker.Foundation
 
         private readonly Dictionary<Guid, AcceptedDeal> acceptedDeals = new Dictionary<Guid, AcceptedDeal>();
         private HoldemDealWindow pendingDeal;
+        private HoldemDealRecord[] dealRecords = Array.Empty<HoldemDealRecord>();
 
         public HoldemDealWindow PendingDeal => pendingDeal;
 
@@ -23,6 +24,14 @@ namespace Poker.Foundation
         /// no manipulation evidence or accusation verdict is fabricated here.
         /// </summary>
         public HoldemReceipt DealUnchanged(HoldemDealCommand command)
+        {
+            if (command == null) throw new ArgumentNullException(nameof(command));
+            if (command.CardChange != null) return Reject(command, HoldemCommandError.InvalidCardChange);
+            return ApplyDealerDeal(command);
+        }
+
+        /// <summary>Serialized host-only card application and causal record transaction.</summary>
+        public HoldemReceipt ApplyDealerDeal(HoldemDealCommand command)
         {
             if (command == null) throw new ArgumentNullException(nameof(command));
             if (command.SessionId != SessionId) return Reject(command, HoldemCommandError.WrongSession);
@@ -43,19 +52,56 @@ namespace Poker.Foundation
             try
             {
                 long nextVersion = checked(Version + 1);
-                HoldemHand candidate = currentHand.DealUnchanged(command.Street);
+                HoldemHand candidate;
+                HoldemCardMutation mutation = null;
+                if (command.CardChange == null) candidate = currentHand.DealUnchanged(command.Street);
+                else
+                {
+                    if (!currentHand.TryDealWithCardChange(command.Street, command.CardChange, out candidate,
+                        out Card before, out int sourceDeckIndex))
+                        return Reject(command, HoldemCommandError.InvalidCardChange);
+                    if (before != command.CardChange.Card) mutation = new HoldemCardMutation(command.CardChange, before, sourceDeckIndex);
+                }
                 ChipLedger candidateLedger = candidate.IsComplete ? MergeSettled(candidate) : settledLedger;
                 HoldemDealWindow nextDeal = DealWindowFor(candidate);
                 HoldemAccusationWindow nextAccusations = AccusationsFor(candidate);
                 var receipt = new HoldemReceipt(SessionId, command.HandId, command.CommandId,
                     null, nextVersion, HoldemCommandError.None);
+                var nextRecords = new HoldemDealRecord[dealRecords.Length + 1];
+                Array.Copy(dealRecords, nextRecords, dealRecords.Length);
+                nextRecords[dealRecords.Length] = new HoldemDealRecord(command, nextAccusations?.Id, nextVersion, mutation);
                 currentHand = candidate; pendingDeal = nextDeal; accusations = nextAccusations;
-                settledLedger = candidateLedger; Version = nextVersion;
+                settledLedger = candidateLedger; Version = nextVersion; dealRecords = nextRecords;
                 acceptedDeals.Add(command.CommandId, new AcceptedDeal(command, receipt));
                 usedCommandIds.Add(command.CommandId);
                 return receipt;
             }
             finally { processing = false; }
+        }
+
+        /// <summary>Host-only lookup with exact reveal attribution. No record means evidence is unavailable.</summary>
+        public HoldemDealRecord FindDealRecord(Guid handId, Guid accusationWindowId, HoldemStreet street)
+        {
+            if (handId != currentHand?.HandId || accusationWindowId == Guid.Empty) return null;
+            foreach (var record in dealRecords)
+                if (record.HandId == handId && record.AccusationWindowId == accusationWindowId
+                    && record.Street == street) return record;
+            return null;
+        }
+
+        /// <summary>
+        /// Seat-bound feedback for the current reveal only. Longer retention is a separate display policy.
+        /// Authentication belongs to the adapter, as with GetSnapshot. No pre-reveal success is exposed.
+        /// </summary>
+        public HoldemOwnCardChange ReadCurrentRevealCardChange(SeatId viewer)
+        {
+            HoldemSeatOrder.IndexOf(roster, viewer);
+            if (currentHand == null || !currentHand.IsRevealPending) return null;
+            foreach (var record in dealRecords)
+                if (record.HandId == currentHand.HandId && record.Street == currentHand.Street
+                    && record.Mutation != null && record.Mutation.Speaker == viewer)
+                    return new HoldemOwnCardChange(record);
+            return null;
         }
 
         private HoldemDealWindow DealWindowFor(HoldemHand candidate)

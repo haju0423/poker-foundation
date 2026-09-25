@@ -25,6 +25,7 @@ namespace Poker.Presentation
         public bool IsDealPending { get; }
         public HoldemDealDisplay PendingDeal { get; }
         public HoldemAccusationView Accusations { get; }
+        public HoldemOwnCardChangeDisplay OwnCardChange { get; }
         public HoldemLegalDisplay LegalActions { get; }
         public HoldemResultDisplay Result { get; }
         public HoldemActionDisplay LastAction { get; }
@@ -45,7 +46,8 @@ namespace Poker.Presentation
             throw new ArgumentException("Unknown display seat.", nameof(seat));
         }
 
-        public HoldemTableDisplay(HoldemSnapshot source, HoldemActionNotice lastAction = null)
+        public HoldemTableDisplay(HoldemSnapshot source, HoldemActionNotice lastAction = null,
+            HoldemOwnCardChange ownCardChange = null)
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
             SessionId = source.SessionId; HandId = source.HandId; SessionVersion = source.SessionVersion;
@@ -58,6 +60,14 @@ namespace Poker.Presentation
             Result = source.Result == null ? null : new HoldemResultDisplay(source.Result);
             LastAction = lastAction == null ? null : new HoldemActionDisplay(lastAction.Seat, lastAction.Kind, lastAction.Street, lastAction.Paid);
             board = CopyCards(source.BoardCount, source.GetBoardCard);
+            if (ownCardChange != null)
+            {
+                if (ownCardChange.HandId != HandId || ownCardChange.Street != Street || !IsRevealPending
+                    || ownCardChange.BoardIndex >= board.Length || board[ownCardChange.BoardIndex] != ownCardChange.Card)
+                    throw new ArgumentException("Success feedback does not match the current reveal.", nameof(ownCardChange));
+                OwnCardChange = new HoldemOwnCardChangeDisplay(ownCardChange.DealWindowId,
+                    ownCardChange.BoardIndex, ownCardChange.Card);
+            }
             seats = new HoldemSeatDisplay[source.SeatCount];
             for (int i = 0; i < seats.Length; i++) seats[i] = new HoldemSeatDisplay(source.GetSeatAt(i));
         }
@@ -88,6 +98,9 @@ namespace Poker.Presentation
                 }
             }
             board = DecodeCards(source.board); seats = new HoldemSeatDisplay[source.seats.Length];
+            if (packet.hasOwnCardChange)
+                OwnCardChange = new HoldemOwnCardChangeDisplay(Guid.ParseExact(packet.ownCardChange.dealWindowId, "N"),
+                    packet.ownCardChange.boardIndex, Card.FromId(packet.ownCardChange.card));
             for (int i = 0; i < seats.Length; i++)
             {
                 string name = null;
@@ -101,6 +114,15 @@ namespace Poker.Presentation
         { var result = new Card[count]; for (int i = 0; i < count; i++) result[i] = read(i); return result; }
         internal static Card[] DecodeCards(int[] cards)
         { var result = new Card[cards.Length]; for (int i = 0; i < cards.Length; i++) result[i] = Card.FromId(cards[i]); return result; }
+    }
+
+    public sealed class HoldemOwnCardChangeDisplay
+    {
+        internal HoldemOwnCardChangeDisplay(Guid eventId, int boardIndex, Card card)
+        { EventId = eventId; BoardIndex = boardIndex; Card = card; }
+        public Guid EventId { get; }
+        public int BoardIndex { get; }
+        public Card Card { get; }
     }
 
     public sealed class HoldemSeatDisplay

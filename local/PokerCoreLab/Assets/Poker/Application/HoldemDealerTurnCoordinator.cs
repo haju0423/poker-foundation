@@ -20,17 +20,18 @@ namespace Poker.Application
 
     /// <summary>
     /// Optional one-slot mailbox for asynchronous host integrations. Construct, Poll and Dispose on
-    /// the owning game thread; only TryPostUnchanged is worker-safe. No workers, timeout, input ACK,
-    /// interpretation, card manipulation or game policy are started here. Dispose with the room.
+    /// the owning game thread; TryPost methods alone are worker-safe. No worker or AI is started here.
+    /// An optional observed-active timeout shares the same mailbox; do not also run a standalone timeout.
+    /// Selection rules must be supplied explicitly. Dispose with the room.
     /// </summary>
-    public sealed class HoldemDealerTurnCoordinator : IDisposable
+    public sealed partial class HoldemDealerTurnCoordinator : IDisposable
     {
         private readonly IHoldemDealerTurnPort port;
         private readonly int ownerThread = Thread.CurrentThread.ManagedThreadId;
         private readonly object gate = new object();
         private HoldemDealerWork current;
         private HoldemDealCommand command;
-        private bool posted, finished, uncertain, disposed, polling;
+        private bool posted, finished, rejected, uncertain, disposed, polling;
 
         public HoldemDealerTurnCoordinator(IHoldemDealerTurnPort port)
         { this.port = port ?? throw new ArgumentNullException(nameof(port)); }
@@ -50,9 +51,11 @@ namespace Poker.Application
             polling = true;
             try
             {
+                TimeSpan? now = ReadClock();
                 var read = port.ReadPendingTurn();
                 if (read == null) throw new InvalidOperationException("The dealer port returned no read result.");
-                if (read.Error == HoldemRoomError.Paused || read.Error == HoldemRoomError.Disconnected) return null;
+                if (read.Error == HoldemRoomError.Paused || read.Error == HoldemRoomError.Disconnected)
+                { lastActiveAt = null; return null; }
                 if (read.Error != HoldemRoomError.None)
                 {
                     Close();
@@ -60,6 +63,8 @@ namespace Poker.Application
                 }
 
                 HoldemDealCommand attempt;
+                HoldemDealerWork selectingWork;
+                HoldemDealerInterpretationBatch selectingBatch;
                 lock (gate)
                 {
                     if (SameWindow(current, read.Turn) && current.ExpectedVersion != read.Turn.ExpectedVersion)
@@ -77,27 +82,37 @@ namespace Poker.Application
                             if (read.Turn != null)
                             {
                                 current = work = new HoldemDealerWork(read.Turn);
-                                command = read.Turn.CreateUnchangedCommand(Guid.NewGuid());
+                                lastActiveAt = now;
                             }
                             return null;
                         }
+                        ObserveDeadline(now);
                         if (current == null || finished || !posted) return null;
                     }
                     attempt = command;
-                    uncertain = true;
+                    selectingWork = current; selectingBatch = interpretations;
                 }
+                if (attempt == null)
+                {
+                    try { attempt = CreateCommand(selectingWork, selectingBatch); }
+                    catch { lock (gate) { finished = rejected = true; } throw; }
+                    lock (gate) command = attempt;
+                }
+                lock (gate) uncertain = true;
                 // Never call the external port under the worker mailbox lock.
-                var receipt = port.DealUnchanged(attempt);
+                var receipt = attempt.CardChange == null ? port.DealUnchanged(attempt)
+                    : applicationPort.ApplyDealerDeal(attempt);
                 if (receipt == null) throw new InvalidOperationException("The dealer port returned no completion result.");
                 lock (gate)
                 {
                     uncertain = false;
                     if (receipt.Error != HoldemRoomError.Paused && receipt.Error != HoldemRoomError.Disconnected)
-                        finished = true;
+                    { finished = true; rejected = !receipt.Accepted; }
                 }
                 return receipt;
             }
             catch (ObjectDisposedException) { Close(); throw; }
+            catch { lastActiveAt = null; throw; }
             finally { polling = false; }
         }
 
@@ -111,6 +126,7 @@ namespace Poker.Application
             lock (gate)
             {
                 if (disposed || finished || work == null || !ReferenceEquals(work, current)) return false;
+                if (posted && interpretations != null) return false;
                 posted = true;
                 return true;
             }
@@ -123,7 +139,8 @@ namespace Poker.Application
                 && work.TargetDeal.Street == turn.TargetDeal.Street;
 
         private void Clear()
-        { current = null; command = null; posted = false; finished = false; uncertain = false; }
+        { current = null; command = null; interpretations = null; posted = false; finished = false;
+            rejected = false; uncertain = false; elapsed = TimeSpan.Zero; lastActiveAt = null; }
 
         private void Close()
         { lock (gate) { Clear(); disposed = true; } }

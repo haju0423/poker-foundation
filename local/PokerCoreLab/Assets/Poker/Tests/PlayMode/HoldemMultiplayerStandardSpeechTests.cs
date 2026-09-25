@@ -31,7 +31,7 @@ namespace Poker.Runtime.Tests
                 {
                     Assert.That(roots[viewer].Q<Label>(className: "omc-subtitle").text, Is.EqualTo(count + "인 멀티플레이"));
                     Assert.That(roots[viewer].Q<Label>("omc-utterance-scope").text, Does.Contain("모두에게"));
-                    Assert.That(roots[viewer].Q("omc-utterance").tooltip, Does.Contain("AI나 카드에 반영되지"));
+                    Assert.That(roots[viewer].Q("omc-utterance").tooltip, Does.Contain("접수됐다고 카드가 바뀐 것은 아니에요"));
                 }
 
                 int accepted = 0;

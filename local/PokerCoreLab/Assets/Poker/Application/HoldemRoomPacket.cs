@@ -26,9 +26,20 @@ namespace Poker.Application
         public HoldemOwnUtterancePacket ownUtterances;
         public bool hasPublicUtterances;
         public HoldemPublicUtterancePacket publicUtterances;
+        public bool hasOwnCardChange;
+        public HoldemOwnCardChangePacket ownCardChange;
         public HoldemRoomMemberPacket[] members;
         public HoldemGamePacket game;
         public HoldemActionPacket lastAction;
+    }
+
+    // This connection's revealed success only. No source deck position, original
+    // card, raw interpretation, other speaker or host record belongs on the wire.
+    [Serializable]
+    public sealed class HoldemOwnCardChangePacket
+    {
+        public string handId, dealWindowId;
+        public int street, boardIndex, card;
     }
 
     [Serializable]
@@ -180,10 +191,18 @@ namespace Poker.Application
                 supportsLobbyLeave = true, hasOwnUtterances = source.OwnUtterances != null,
                 hasRematch = true, rematchSupported = source.RematchSupported, matchNumber = source.MatchNumber,
                 hasPublicUtterances = source.PublicUtterances != null,
+                hasOwnCardChange = source.OwnCardChange != null,
                 hasRules = source.Rules != null,
                 hasHistory = source.History != null,
                 members = new HoldemRoomMemberPacket[source.MemberCount], hasLastAction = source.LastAction != null
             };
+            if (source.OwnCardChange != null)
+            {
+                var own = source.OwnCardChange;
+                packet.ownCardChange = new HoldemOwnCardChangePacket { handId = own.HandId.ToString("N"),
+                    dealWindowId = own.DealWindowId.ToString("N"), street = (int)own.Street,
+                    boardIndex = own.BoardIndex, card = own.Card.Id };
+            }
             if (source.History != null)
             {
                 var history = source.History;

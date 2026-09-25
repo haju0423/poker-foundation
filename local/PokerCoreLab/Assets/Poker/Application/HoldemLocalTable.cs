@@ -18,6 +18,11 @@ namespace Poker.Application
         HoldemReceipt SubmitAccusationChoice(HoldemAccusationChoiceCommand command);
     }
 
+    public interface IHoldemOwnCardChangeSource
+    {
+        HoldemOwnCardChange ReadOwnCardChange();
+    }
+
     public sealed class HoldemActionNotice
     {
         internal HoldemActionNotice(SeatId seat, BettingAction action, long paid, HoldemStreet street)
@@ -30,7 +35,7 @@ namespace Poker.Application
     }
 
     /// <summary>Trusted single-player host. UI receives a bound human port, never the session or opponent view.</summary>
-    public sealed class HoldemLocalTable
+    public sealed partial class HoldemLocalTable : IHoldemDealerDealApplicationPort
     {
         private readonly HoldemSession session;
         private readonly IHoldemOpponentPolicy opponent;
@@ -41,6 +46,7 @@ namespace Poker.Application
         private readonly List<HoldemHistoryEntry> history = new List<HoldemHistoryEntry>();
         private HoldemHandHistory historySnapshot;
         private readonly HoldemUtteranceInbox utterances;
+        private readonly bool retainsDealerInput;
 
         public HoldemLocalTable(HoldemConfig config, IRandomSource deckRandom,
             IRandomSource opponentRandom, IHoldemOpponentPolicy opponent = null)
@@ -63,6 +69,7 @@ namespace Poker.Application
             Human = new HumanPort(this);
             if (utterancePolicy != null)
             {
+                retainsDealerInput = utterancePolicy.BatchRetention == HoldemUtteranceBatchRetention.UntilHostAcknowledges;
                 utterances = new HoldemUtteranceInbox(() => Human.Read(), utterancePolicy);
                 HumanUtterances = utterances.Bind(humanSeat);
             }
@@ -84,6 +91,24 @@ namespace Poker.Application
                 RecordReturns(before, Human.Read(), null, 0);
             return receipt;
         }
+
+        public HoldemReceipt ApplyDealerDeal(HoldemDealCommand command)
+        {
+            if (command == null) throw new ArgumentNullException(nameof(command));
+            if ((command.CardChange != null && !retainsDealerInput)
+                || !HoldemDealerSourceValidation.Matches(command, utterances?.ReadClosedBatches()))
+                return command.RejectCardChange();
+            var before = Human.Read();
+            var receipt = session.ApplyDealerDeal(command);
+            if (receipt.Accepted && receipt.Version > before.SessionVersion)
+                RecordReturns(before, Human.Read(), null, 0);
+            return receipt;
+        }
+
+        public HoldemOwnCardChange ReadHumanCardChange() => session.ReadCurrentRevealCardChange(humanSeat);
+
+        public HoldemEvidenceResolution ResolveRecordedAccusation(Guid claimId, HoldemAccusationEvidenceScope scope)
+            => new HoldemAccusationResolver(session, new HoldemRecordedDealerEvidence(session, scope)).Resolve(claimId);
 
         // A local-host control, deliberately absent from IHoldemPlayerPort.
         public HoldemReceipt ResumeAfterReveal(HoldemRevealCommand command)
@@ -216,11 +241,12 @@ namespace Poker.Application
             return historySnapshot;
         }
 
-        private sealed class HumanPort : IHoldemPlayerPort, IHoldemAccusationPlayerPort, IHoldemHistoryPort
+        private sealed class HumanPort : IHoldemPlayerPort, IHoldemAccusationPlayerPort, IHoldemHistoryPort, IHoldemOwnCardChangeSource
         {
             private readonly HoldemLocalTable table;
             public HumanPort(HoldemLocalTable table) { this.table = table; }
             public HoldemSnapshot Read() => table.session.GetSnapshot(table.humanSeat);
+            public HoldemOwnCardChange ReadOwnCardChange() => table.ReadHumanCardChange();
             public HoldemActionNotice LastAction => table.lastAction;
             public HoldemHandHistory ReadHistory() => table.ReadHistory();
             public HoldemReceipt Submit(HoldemCommand command) => table.Apply(table.humanSeat, command);

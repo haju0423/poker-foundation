@@ -128,7 +128,8 @@ namespace Poker.Application
                         if (action != null && action.Street == game.Street) currentActions.Add(action);
                 return new HoldemRoomView(session.SessionId, revision, member.Seat, IsPaused(), visible,
                     game, lastAction, currentActions.ToArray(), ReadUtterances(connection), rules, ReadHistory(game),
-                    ReadPublicRemarks(game), session.MatchNumber, SupportsRematch());
+                    ReadPublicRemarks(game), session.MatchNumber, SupportsRematch(),
+                    session.ReadCurrentRevealCardChange(member.Seat));
             }
         }
 

@@ -169,6 +169,7 @@ namespace Poker.Runtime
                         || Lobby.Rules != null && !Lobby.Rules.Matches(nextLobby.Rules)))
                         throw new ArgumentException("Confirmed room rules changed.");
                     var nextDisplay = latest.hasGame ? new HoldemTableDisplay(latest) : null;
+                    ValidateRevealFeedback(display, nextDisplay);
                     if (Lobby != null && (Lobby.HasRematch != nextLobby.HasRematch
                         || nextLobby.MatchNumber < Lobby.MatchNumber
                         || nextLobby.MatchNumber > Lobby.MatchNumber && (display?.IsOver != true || nextDisplay == null
@@ -246,6 +247,18 @@ namespace Poker.Runtime
             client.Dispose(); client = replacement; observedRevision = -1; invalidState = false; retryAfterReconnect = true; awaitingFreshState = true;
             pendingStartedAt = sentAt = milliseconds();
             Changed?.Invoke();
+        }
+
+        private static void ValidateRevealFeedback(HoldemTableDisplay previous, HoldemTableDisplay next)
+        {
+            if (previous == null || next == null || previous.HandId != next.HandId
+                || previous.Street != next.Street || !previous.IsRevealPending || !next.IsRevealPending) return;
+            var before = previous.OwnCardChange; var after = next.OwnCardChange;
+            // Feedback is committed with the reveal, never appended or revised by a later packet.
+            // Keep this check across ReplaceConnection as well as ordinary room revisions.
+            if ((before == null) != (after == null) || before != null
+                && (before.EventId != after.EventId || before.BoardIndex != after.BoardIndex || before.Card != after.Card))
+                throw new ArgumentException("Revealed card-change feedback changed.");
         }
 
         public void Act(HoldemTableDisplay basis, BettingAction action)

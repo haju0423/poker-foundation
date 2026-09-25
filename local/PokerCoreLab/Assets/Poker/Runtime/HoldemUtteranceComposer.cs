@@ -37,13 +37,13 @@ namespace Poker.Runtime
             status = new Label { name = "omc-utterance-status", enableRichText = false };
             status.AddToClassList("omc-utterance-status"); box.Add(status);
             var scope = new Label(publishesUtterances ? "보낸 멘트는 이름과 함께 모두에게 보여요."
-                : "접수만 확인해요. AI나 카드에는 반영되지 않아요.") { name = "omc-utterance-scope" };
+                : "멘트 접수와 카드 변경 성공은 달라요.") { name = "omc-utterance-scope" };
             scope.AddToClassList("omc-utterance-scope"); box.Add(scope);
             box.tooltip = publishesUtterances
-                ? "멘트 원문과 발언자는 모두에게 공개돼요. 이번 판 기록에서 다시 볼 수 있어요. 현재는 AI나 카드에 반영되지 않아요."
+                ? "멘트 원문과 발언자는 모두에게 공개돼요. 이번 판 기록에서 다시 볼 수 있어요. 접수됐다고 카드가 바뀐 것은 아니에요."
                 : port is IHoldemAsyncUtterancePort
-                ? "원문은 방장 기기의 접수함에 저장돼요. 다른 참가자 화면이나 AI, 카드에는 아직 연결하지 않았어요."
-                : "이 개발 장면에서는 본인 접수만 확인하며 다른 참가자 화면이나 AI에 전달하거나 카드에 반영하지 않아요.";
+                ? "원문은 방장 기기의 접수함에 저장돼요. 이 표시는 멘트 접수 확인이며 카드 변경 성공 표시가 아니에요."
+                : "이 개발 장면에서는 본인이 보낸 멘트를 확인해요. 접수 확인만으로 카드 변경 성공 여부를 알 수는 없어요.";
             input.RegisterValueChangedCallback(OnChanged);
         }
 

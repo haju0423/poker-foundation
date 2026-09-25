@@ -25,6 +25,18 @@ namespace Poker.Presentation
             }
             Require(g.seats.Length == capacity);
             var cards = new HashSet<int>(); foreach (int card in g.board) Require(Card(card) && cards.Add(card));
+            if (p.hasOwnCardChange)
+            {
+                Require(p.hasRules && p.rules.waitsForHostDeal && p.rules.pausesAfterReveal
+                    && p.rules.receivesUtterances && p.hasOwnUtterances && p.ownUtterances != null);
+                var own = p.ownCardChange;
+                Require(own != null && Id(own.dealWindowId) && own.handId == g.handId
+                    && own.street == g.street && g.revealPending && !g.dealPending && !g.hasResult);
+                int first = g.street == 1 ? 0 : g.street == 2 ? 3 : 4;
+                int last = g.street == 1 ? 2 : first;
+                Require(g.street >= 1 && g.street <= 3 && own.boardIndex >= first && own.boardIndex <= last
+                    && own.boardIndex < g.board.Length && own.card == g.board[own.boardIndex]);
+            }
             var seatIds = new HashSet<int>(); var indices = new HashSet<int>(); bool foundViewer = false;
             foreach (var s in g.seats)
             {

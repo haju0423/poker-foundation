@@ -37,7 +37,8 @@ namespace Poker.Foundation
         DealPending,
         DealNotPending,
         WrongDealWindow,
-        MatchNotOver
+        MatchNotOver,
+        InvalidCardChange
     }
 
     public sealed class HoldemStartCommand
@@ -324,6 +325,7 @@ namespace Poker.Foundation
                 accepted.Clear();
                 acceptedReveals.Clear();
                 acceptedDeals.Clear();
+                dealRecords = Array.Empty<HoldemDealRecord>();
                 acceptedAccusations.Clear();
                 usedCommandIds.Add(command.CommandId);
                 return receipt;

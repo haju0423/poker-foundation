@@ -54,7 +54,7 @@ namespace Poker.Runtime.Tests
         {
             UseUtteranceTable(); yield return Resize(new Vector2Int(960, 640));
             var scope = Root.Q<Label>("omc-utterance-scope");
-            Assert.That(scope.text, Does.Contain("AI나 카드에는 반영되지"));
+            Assert.That(scope.text, Does.Contain("멘트 접수와 카드 변경 성공은 달라요"));
             Assert.That(scope.worldBound.height, Is.GreaterThan(0));
             var field = Root.Q<TextField>("omc-utterance-input");
             field.value = "오늘은 <b>빨간색</b>이 좋네요";

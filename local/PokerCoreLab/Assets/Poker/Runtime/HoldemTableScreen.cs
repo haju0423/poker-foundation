@@ -513,8 +513,21 @@ namespace Poker.Runtime
             board.Clear();
             var own = view.GetSeat(view.ViewerSeat);
             for (int i = 0; i < 5; i++)
-                board.Add(i < view.BoardCount ? Face(view.GetBoardCard(i), highlightedBest.Contains(view.GetBoardCard(i)))
-                    : Empty(i == 1 ? "플랍" : i == 3 ? "턴" : i == 4 ? "리버" : ""));
+            {
+                var card = i < view.BoardCount ? Face(view.GetBoardCard(i), highlightedBest.Contains(view.GetBoardCard(i)))
+                    : Empty(i == 1 ? "플랍" : i == 3 ? "턴" : i == 4 ? "리버" : "");
+                if (view.OwnCardChange?.BoardIndex == i)
+                {
+                    var badge = Text("변경됨", "omc-own-change");
+                    badge.name = "omc-own-card-change";
+                    badge.tooltip = "내 멘트로 바뀐 카드예요. 나에게만 표시돼요.";
+                    badge.style.fontSize = 10;
+                    badge.style.color = new Color(0.22f, 0.17f, 0.05f);
+                    badge.style.backgroundColor = new Color(0.98f, 0.85f, 0.46f);
+                    card.Add(badge);
+                }
+                board.Add(card);
+            }
             result.text = pending ? "동률 팟의 나머지 칩 때문에 정산을 기다리고 있어요." : ResultText();
             Show(result, complete || pending);
             last.text = pending ? KoreanPokerText.SplitRemainderHelp : NoticeText();
@@ -949,7 +962,8 @@ namespace Poker.Runtime
             box.Add(Text(KoreanPokerText.RankLabel(card), "omc-rank"));
             box.Add(Text(SuitSymbol(card.Suit), "omc-suit")); return box;
         }
-        private HoldemTableDisplay ReadDisplay() => remote != null ? remote.Read() : new HoldemTableDisplay(port.Read(), port.LastAction);
+        private HoldemTableDisplay ReadDisplay() => remote != null ? remote.Read() : new HoldemTableDisplay(port.Read(),
+            port.LastAction, (port as IHoldemOwnCardChangeSource)?.ReadOwnCardChange());
         public static string SuitSymbol(Suit suit)
         {
             switch (suit)

@@ -3,7 +3,8 @@ using System;
 namespace Poker.Foundation
 {
     /// <summary>
-    /// A single-use 52-card deck: order is fixed after creation, only the cursor advances.
+    /// A single-use 52-card deck. Public callers can only advance the cursor;
+    /// the authority may swap one future community slot with an unused card.
     /// No reset, reshuffle, or remaining-order access. Not thread-safe; the authority
     /// must serialize calls. Returned cards must be routed only to their authorized seat.
     /// </summary>
@@ -23,6 +24,31 @@ namespace Poker.Foundation
             var copy = new Deck((Card[])cards.Clone());
             copy.nextIndex = nextIndex;
             return copy;
+        }
+
+        // Does not consume cards. The upcoming burn and other cards in this reveal
+        // are excluded: moving a card already in the flop only reorders the same board.
+        internal bool TrySwapCommunityCard(int revealCount, int remainingRunoutCount, int slot,
+            Card replacement, out Card before, out int sourceDeckIndex)
+        {
+            before = default; sourceDeckIndex = -1;
+            if (!replacement.IsValid || (revealCount != 1 && revealCount != 3)
+                || remainingRunoutCount < revealCount + 1 || remainingRunoutCount > RemainingCount
+                || slot < 0 || slot >= revealCount) return false;
+            int target = nextIndex + 1 + slot;
+            before = cards[target];
+            if (before == replacement) return true;
+            // Explicit reserve-only development scope: no indirect changes to the
+            // rest of this hand's board or burn sequence. Not a candidate-selection rule.
+            for (int i = nextIndex + remainingRunoutCount; i < cards.Length; i++)
+            {
+                if (cards[i] != replacement) continue;
+                cards[i] = before;
+                cards[target] = replacement;
+                sourceDeckIndex = i;
+                return true;
+            }
+            return false;
         }
 
         /// <summary>

@@ -15,7 +15,7 @@ namespace Poker.Transport
     /// Development transport for loopback or an explicitly selected trusted LAN interface. No TLS, relay or NAT traversal.
     /// Call Pump and host integration methods on one owning game thread; socket workers only handle framed bytes.
     /// </summary>
-    public sealed class HoldemTcpServer : IDisposable, IHoldemDealerTurnPort
+    public sealed class HoldemTcpServer : IDisposable, IHoldemDealerDealApplicationPort
     {
         private const int MaximumAdmissionIdentities = 256;
         public const int MaximumCloseRecords = 32;
@@ -352,6 +352,18 @@ namespace Poker.Transport
                 if (disposed) throw new ObjectDisposedException(nameof(HoldemTcpServer));
                 ObserveClosedPeers();
                 return room.DealUnchanged(admissions[hostKeyHash].Connection, command);
+            }
+        }
+
+        /// <summary>Host-process only. Player packets cannot choose replacement cards or attribution.</summary>
+        public HoldemRoomReceipt ApplyDealerDeal(HoldemDealCommand command)
+        {
+            if (command == null) throw new ArgumentNullException(nameof(command));
+            lock (gate)
+            {
+                if (disposed) throw new ObjectDisposedException(nameof(HoldemTcpServer));
+                ObserveClosedPeers();
+                return room.ApplyDealerDeal(admissions[hostKeyHash].Connection, command);
             }
         }
 
