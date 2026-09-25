@@ -17,6 +17,7 @@ namespace Poker.Runtime
         private long observedVersion;
         public HoldemTableOptions ActiveOptions { get; private set; }
         public HoldemTableSettings Settings { get => settings; set => settings = value; }
+        public Action ReturnToMenu { get; set; }
         public HoldemProgressInfo Progress
         {
             get
@@ -63,7 +64,7 @@ namespace Poker.Runtime
                     original.AccusationMode == HoldemAccusationMode.Disabled ? ConfigureSession : (Action<HoldemTableOptions>)null,
                     dealUnchanged: original.DealPolicy == HoldemDealPolicy.WaitForHost
                         ? candidate.DealUnchanged : (Func<HoldemDealCommand, HoldemReceipt>)null,
-                    utterancePort: candidate.HumanUtterances);
+                    utterancePort: candidate.HumanUtterances, returnToMenu: ReturnToMenu);
             }
             catch { candidateScreen?.Dispose(); nextDeck.Dispose(); nextOpponent.Dispose(); throw; }
             screen?.Dispose(); deckRandom?.Dispose(); opponentRandom?.Dispose();

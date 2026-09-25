@@ -1,0 +1,8 @@
+.omc-menu { flex-grow: 1; align-items: center; justify-content: center; background-color: rgb(15, 31, 35); color: rgb(236, 236, 225); }
+.omc-menu-card { width: 480px; max-width: 92%; padding: 24px; }
+.omc-menu-title { font-size: 38px; -unity-font-style: bold; -unity-text-align: middle-center; white-space: normal; }
+.omc-menu-subtitle { font-size: 18px; -unity-text-align: middle-center; margin-top: 6px; margin-bottom: 28px; color: rgb(183, 198, 195); }
+.omc-menu Button { min-height: 64px; font-size: 23px; margin: 0; background-color: rgb(46, 78, 79); color: rgb(241, 240, 223); border-width: 1px; border-color: rgb(95, 127, 121); }
+.omc-menu Button:hover { background-color: rgb(59, 97, 94); }
+.omc-menu Button:focus { border-color: rgb(220, 195, 118); border-width: 2px; }
+.omc-menu-hint { font-size: 15px; -unity-text-align: middle-center; white-space: normal; color: rgb(183, 198, 195); margin-top: 8px; margin-bottom: 24px; }

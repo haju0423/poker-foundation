@@ -23,6 +23,7 @@ namespace Poker.Runtime
         private readonly IHoldemHistoryPort historyPort;
         private readonly Action restart;
         private readonly Action abandonSession;
+        private readonly Action returnToMenu;
         private readonly Func<HoldemRevealCommand, HoldemReceipt> resumeReveal;
         private readonly Func<HoldemDealCommand, HoldemReceipt> dealUnchanged;
         private readonly IHoldemAccusationPlayerPort accusationPort;
@@ -63,7 +64,8 @@ namespace Poker.Runtime
         private double lockedUntil;
         private IVisualElementScheduledItem unlock;
         public bool IsProgressPaused => paused || ModalOpen || disposed;
-        private bool ModalOpen => helpOpen || resetOpen || optionsOpen || potDetailsOpen || historyOpen;
+        private bool menuOpen;
+        private bool ModalOpen => helpOpen || resetOpen || optionsOpen || potDetailsOpen || historyOpen || menuOpen;
         private bool NetworkCanSend => remote == null || remote.CanSend;
         private bool HostControls => remote == null || remote.IsHost;
         private bool CanReleaseDeal => dealUnchanged != null || remote?.IsHost == true;
@@ -74,7 +76,7 @@ namespace Poker.Runtime
             Action abandonSession = null, Func<HoldemRevealCommand, HoldemReceipt> resumeReveal = null,
             HoldemTableOptions options = null, Action<HoldemTableOptions> configureTable = null,
             Func<HoldemDealCommand, HoldemReceipt> dealUnchanged = null,
-            IHoldemUtterancePlayerPort utterancePort = null)
+            IHoldemUtterancePlayerPort utterancePort = null, Action returnToMenu = null)
         {
             this.root = root ?? throw new ArgumentNullException(nameof(root));
             this.port = port ?? throw new ArgumentNullException(nameof(port));
@@ -82,6 +84,7 @@ namespace Poker.Runtime
             accusationPort = port as IHoldemAccusationPlayerPort;
             this.restart = restart ?? throw new ArgumentNullException(nameof(restart));
             this.abandonSession = abandonSession;
+            this.returnToMenu = returnToMenu;
             this.resumeReveal = resumeReveal;
             this.dealUnchanged = dealUnchanged;
             this.utterancePort = utterancePort;
@@ -129,6 +132,7 @@ namespace Poker.Runtime
             counter = Text("", "omc-counter"); right.Add(counter);
             if (historyPort != null) { historyButton = Click("이번 판 기록", "omc-history", OpenHistory); right.Add(historyButton); }
             if (configureTable != null) right.Add(Click("새 게임 설정", "omc-options", OpenOptions));
+            if (returnToMenu != null) right.Add(Click("시작 메뉴", "omc-menu-return", OpenMenuConfirmation));
             right.Add(Click("도움말", "omc-help", () => {
                 if (disposed || ModalOpen) return;
                 SetHelpPage(0); helpOpen = true; Show(help, true);
@@ -263,6 +267,29 @@ namespace Poker.Runtime
             }));
             Show(resetConfirmation, false);
             if (configureTable != null) BuildOptions();
+            if (returnToMenu != null) BuildMenuConfirmation();
+        }
+
+        private VisualElement menuConfirmation;
+        private void BuildMenuConfirmation()
+        {
+            menuConfirmation = Box("omc-overlay", root); menuConfirmation.name = "omc-menu-confirmation";
+            var card = Box("omc-help-card", menuConfirmation);
+            card.Add(Text("시작 메뉴로 돌아갈까요?", "omc-help-title"));
+            card.Add(Text("현재 판과 보유 칩은 저장되지 않아요. 다시 시작하면 새 게임이 시작돼요.", "omc-help-copy"));
+            card.Add(Click("계속 플레이", "omc-menu-cancel", () => CloseModal(ref menuOpen, menuConfirmation)));
+            card.Add(Click("메뉴로 돌아가기", "omc-menu-confirm", () => {
+                if (disposed || !menuOpen) return;
+                menuOpen = false;
+                returnToMenu();
+            }));
+            Show(menuConfirmation, false);
+        }
+
+        private void OpenMenuConfirmation()
+        {
+            if (disposed || ModalOpen) return;
+            menuOpen = true; Show(menuConfirmation, true);
         }
 
         private void CloseModal(ref bool open, VisualElement overlay)

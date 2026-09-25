@@ -56,6 +56,8 @@ namespace Poker.Editor
         public static void BuildFlowPreviewWindows() => BuildPlayer(BuildTarget.StandaloneWindows64, BuildOptions.None, true);
         public static void BuildMultiplayer() => BuildPlayer(BuildTarget.StandaloneOSX, BuildOptions.None, multiplayer: true);
         public static void BuildMultiplayerWindows() => BuildPlayer(BuildTarget.StandaloneWindows64, BuildOptions.None, multiplayer: true);
+        public static void BuildUnified() => BuildPlayer(BuildTarget.StandaloneOSX, BuildOptions.None, unified: true);
+        public static void BuildUnifiedWindows() => BuildPlayer(BuildTarget.StandaloneWindows64, BuildOptions.None, unified: true);
         public static void BuildMultiplayerFlowPreview() => BuildPlayer(BuildTarget.StandaloneOSX, BuildOptions.None, true, true);
         public static void BuildMultiplayerFlowPreviewWindows() => BuildPlayer(BuildTarget.StandaloneWindows64, BuildOptions.None, true, true);
         public static void ConfigureFourSeatSample()
@@ -84,7 +86,7 @@ namespace Poker.Editor
             }
             Validate();
         }
-        private static void BuildPlayer(BuildTarget target, BuildOptions options, bool flowPreview = false, bool multiplayer = false)
+        private static void BuildPlayer(BuildTarget target, BuildOptions options, bool flowPreview = false, bool multiplayer = false, bool unified = false)
         {
             string path = Argument("-buildOutput");
             string extension = target == BuildTarget.StandaloneOSX ? ".app" : ".exe";
@@ -93,7 +95,8 @@ namespace Poker.Editor
             if (!BuildPipeline.IsBuildTargetSupported(BuildTargetGroup.Standalone, target))
                 throw new InvalidOperationException("Matching desktop build support is unavailable.");
             HoldemBuildNotices.ValidateSource(UnityEngine.Application.dataPath);
-            if (multiplayer && flowPreview) HoldemMultiplayerSceneBuilder.CreateFlowPreview();
+            if (unified) HoldemAppSceneBuilder.Create();
+            else if (multiplayer && flowPreview) HoldemMultiplayerSceneBuilder.CreateFlowPreview();
             else if (multiplayer) HoldemMultiplayerSceneBuilder.Create();
             else if (flowPreview) HoldemFlowPreviewBuilder.Create();
             else Create();
@@ -117,7 +120,7 @@ namespace Poker.Editor
                 args.Add("-pathmap:\"" + projectRoot + "=/_/Poker\"");
                 PlayerSettings.SetAdditionalCompilerArguments(NamedBuildTarget.Standalone, args.ToArray());
                 report = BuildPipeline.BuildPlayer(new BuildPlayerOptions {
-                    scenes = new[] { multiplayer ? (flowPreview ? HoldemMultiplayerSceneBuilder.FlowScenePath : HoldemMultiplayerSceneBuilder.ScenePath)
+                    scenes = new[] { unified ? HoldemAppSceneBuilder.ScenePath : multiplayer ? (flowPreview ? HoldemMultiplayerSceneBuilder.FlowScenePath : HoldemMultiplayerSceneBuilder.ScenePath)
                         : flowPreview ? HoldemFlowPreviewBuilder.ScenePath : ScenePath },
                     locationPathName = Path.GetFullPath(path), target = target, options = options
                 });

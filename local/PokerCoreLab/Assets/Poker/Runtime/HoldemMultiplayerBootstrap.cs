@@ -50,6 +50,8 @@ namespace Poker.Runtime
         }
         public HoldemMultiplayerConnection Connection => connection;
         public bool HasFailed => failed;
+        public Action ReturnToMenu { get; set; }
+        private Button menuReturn;
 
         private void OnEnable()
         {
@@ -144,6 +146,11 @@ namespace Poker.Runtime
             var buttons = Box(form, "omc-lobby-buttons");
             host = Button(buttons, "방 만들기", "omc-room-host", () => Begin(true));
             join = Button(buttons, "참가하기", "omc-room-join", () => Begin(false));
+            if (ReturnToMenu != null)
+                menuReturn = Button(form, "시작 메뉴", "omc-room-menu", () => {
+                    if (!isActiveAndEnabled || connection == null || connection.HasSession || confirming || failed) return;
+                    ReturnToMenu();
+                });
             roomShare = Box(lobby, "omc-room-share");
             var shareRow = Box(roomShare, "omc-room-share-row");
             shareAddress = Field(shareRow, "방 주소", "omc-room-share-address", "", 21);
@@ -320,6 +327,7 @@ namespace Poker.Runtime
             }
             Show(lobby, !playing); Show(tableSurface, playing); Show(connectionBar, session || failed); Show(confirmation, confirming);
             Show(form, room == null);
+            if (menuReturn != null) Show(menuReturn, !session && !failed && !confirming);
             bool canShare = room != null && !room.HasGame && !exitOnly;
             Show(roomShare, canShare);
             string sharedEndpoint = canShare ? connection.EndpointText : "";

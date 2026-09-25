@@ -4,24 +4,25 @@
 
 ## 다운로드
 
-| 실행 방식 | Windows | Mac |
-|---|---|---|
-| 혼자 하기 · NPC 상대 | [다운로드](https://github.com/haju0423/poker-foundation/releases/download/2026.09.25-multiplayer/OneMoreCard-Solo-Windows.zip) | [다운로드](https://github.com/haju0423/poker-foundation/releases/download/2026.09.25-multiplayer/OneMoreCard-Solo-Mac.zip) |
-| 멀티 · 3~4인 | [다운로드](https://github.com/haju0423/poker-foundation/releases/download/2026.09.25-multiplayer/OneMoreCard-Multiplayer-Windows.zip) | [다운로드](https://github.com/haju0423/poker-foundation/releases/download/2026.09.25-multiplayer/OneMoreCard-Multiplayer-Mac.zip) |
+- [Windows 다운로드](https://github.com/haju0423/poker-foundation/releases/download/2026.09.25-unified/OneMoreCard-Windows.zip)
+- [Mac 다운로드](https://github.com/haju0423/poker-foundation/releases/download/2026.09.25-unified/OneMoreCard-Mac.zip)
 
 Windows는 압축을 모두 풀고 폴더 안의 `.exe`를 실행합니다. 실행파일만 따로 옮기지 말고 나머지 파일도 함께 둡니다. Mac은 압축을 풀고 `.app`을 실행합니다.
 
+실행 후 시작 메뉴에서 **혼자 하기 / 함께 하기**를 선택합니다. 두 모드가 같은 실행파일에 들어 있습니다.
+
 ## 혼자 하기
 
-실행하면 나와 NPC 3명이 바로 게임을 시작합니다. 사람을 모으지 않고 베팅·정산·화면 동작을 확인할 때 사용할 수 있습니다.
+시작 메뉴에서 **혼자 하기**를 누르면 나와 NPC 3명이 바로 게임을 시작합니다. 사람을 모으지 않고 베팅·정산·화면 동작을 확인할 때 사용할 수 있습니다.
 
 - **새 게임 설정**에서 참가 인원(나 포함 2~4명), 상대 행동 속도, 공용 카드 공개 후 멈춤을 바꿀 수 있습니다.
 - **적용하고 새 게임**은 현재 판과 보유 칩을 초기화합니다.
 - **공용 카드 공개 후 잠시 멈추기**를 켜면 플랍·턴·리버를 보고 **계속**을 눌러 진행합니다.
+- 상단 **시작 메뉴**에서 확인 후 메뉴로 돌아갑니다. 나가기 확인 중에는 진행이 멈추며, 취소하면 같은 판을 계속합니다. 메뉴로 나가면 판과 칩은 저장되지 않습니다.
 
 ## 함께 하기
 
-모두 같은 버전의 멀티 실행파일을 사용합니다. 현재 연결 방식은 **같은 공유기·사설망 안에서 사용하는 방식**입니다. 서로 다른 집에서 공인 IP나 초대 코드로 접속하는 방식은 지원하지 않습니다.
+모두 같은 버전으로 실행하고 시작 메뉴에서 **함께 하기**를 누릅니다. 현재 연결 방식은 **같은 공유기·사설망 안에서 사용하는 방식**입니다. 서로 다른 집에서 공인 IP나 초대 코드로 접속하는 방식은 지원하지 않습니다.
 
 ### 방장
 
@@ -42,6 +43,7 @@ Windows는 압축을 모두 풀고 폴더 안의 `.exe`를 실행합니다. 실�
 - 연결이 끊기면 **다시 연결**로 같은 자리에 돌아올 수 있습니다. 이때 앱을 닫거나 방에서 나가지 않고 기존 연결 정보를 유지합니다. 방장이 방을 닫으면 경기를 이어갈 수 없습니다.
 - 한 경기 종료 후 **한 경기 더**에서 전원이 다시 준비하고 방장이 **새 경기 시작**을 누르면 같은 방에서 시작 칩으로 다시 플레이합니다.
 - **멘트**에 입력한 원문은 모두에게 보이며 **이번 판 기록**에서 다시 읽을 수 있습니다. 프리플랍·플랍·턴의 베팅 단계마다 한 번 보낼 수 있고, 현재 실행본에서는 카드나 판정에 영향을 주지 않습니다.
+- **나가기**에서 확인 후 방에서 나옵니다. 접속 화면의 **시작 메뉴**를 누르면 혼자 하기로 바꿀 수 있습니다. 방장이 나가면 방이 닫힙니다.
 
 ## 기본 조작
 
@@ -56,7 +58,9 @@ Windows는 압축을 모두 풀고 폴더 안의 `.exe`를 실행합니다. 실�
 
 ## 프로젝트 실행
 
-Unity 6000.3.23f1에서 [프로젝트 폴더](local/PokerCoreLab)를 열고 원하는 장면을 실행합니다.
+Unity 6000.3.23f1에서 [프로젝트 폴더](local/PokerCoreLab)를 열고 [OneMoreCard.unity](local/PokerCoreLab/Assets/Poker/Samples/OneMoreCard.unity)를 실행합니다.
+
+개별 기능을 바로 확인하려면 아래 장면을 사용할 수 있습니다.
 
 - 혼자 하기: [HoldemTable.unity](local/PokerCoreLab/Assets/Poker/Samples/HoldemTable.unity)
 - 멀티: [HoldemMultiplayer.unity](local/PokerCoreLab/Assets/Poker/Samples/HoldemMultiplayer.unity)

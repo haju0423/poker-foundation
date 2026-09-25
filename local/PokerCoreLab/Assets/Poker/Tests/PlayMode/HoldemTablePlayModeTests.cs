@@ -551,11 +551,24 @@ namespace Poker.Runtime.Tests
                 Assert.That(bootstrap.Settings.CreateConfig().DealPolicy, Is.EqualTo(HoldemDealPolicy.Automatic));
                 Assert.That(savedDoc.rootVisualElement.Q<Button>("omc-release-deal").style.display.value, Is.EqualTo(DisplayStyle.None));
                 savedDoc.panelSettings.targetTexture = texture;
-                double deadline = Time.realtimeSinceStartupAsDouble + 35;
+                // Keep the production NPC and saved assets; shorten only presentation pacing through the real options UI.
+                float savedDelay = bootstrap.Settings.opponentDelaySeconds;
+                Submit(savedDoc.rootVisualElement.Q<Button>("omc-options"));
+                savedDoc.rootVisualElement.Q<DropdownField>("omc-options-speed").index = 0;
+                Submit(savedDoc.rootVisualElement.Q<Button>("omc-apply-options"));
+                Assert.That(bootstrap.ActiveOptions.OpponentDelaySeconds, Is.EqualTo(0.25f));
+                Assert.That(bootstrap.Settings.opponentDelaySeconds, Is.EqualTo(savedDelay));
+                double deadline = Time.realtimeSinceStartupAsDouble + 60;
+                double progressedAt = Time.realtimeSinceStartupAsDouble;
+                long lastVersion = bootstrap.Progress.Version;
                 while (bootstrap.Progress.Street != HoldemStreet.Complete && Time.realtimeSinceStartupAsDouble < deadline)
                 {
                     var button = savedDoc.rootVisualElement.Q<Button>("omc-passive");
                     if (button.enabledInHierarchy && button.style.display.value != DisplayStyle.None) Submit(button);
+                    if (bootstrap.Progress.Version != lastVersion)
+                    { lastVersion = bootstrap.Progress.Version; progressedAt = Time.realtimeSinceStartupAsDouble; }
+                    Assert.That(Time.realtimeSinceStartupAsDouble - progressedAt, Is.LessThan(10),
+                        "Production hand stopped advancing at " + bootstrap.Progress.Street + ", version " + lastVersion);
                     yield return null;
                 }
                 Assert.That(bootstrap.Progress.Street, Is.EqualTo(HoldemStreet.Complete));
