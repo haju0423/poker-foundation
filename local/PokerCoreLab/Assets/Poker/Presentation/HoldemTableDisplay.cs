@@ -24,7 +24,7 @@ namespace Poker.Presentation
         public bool IsRevealPending { get; }
         public bool IsDealPending { get; }
         public HoldemDealDisplay PendingDeal { get; }
-        public HoldemAccusationView Accusations { get; }
+        public HoldemAccusationDisplay Accusations { get; }
         public HoldemOwnCardChangeDisplay OwnCardChange { get; }
         public HoldemLegalDisplay LegalActions { get; }
         public HoldemResultDisplay Result { get; }
@@ -54,7 +54,8 @@ namespace Poker.Presentation
             HandNumber = source.HandNumber; PotAmount = source.PotAmount; ViewerSeat = source.ViewerSeat;
             CurrentSeat = source.CurrentSeat; Street = source.Street; CanContinue = source.CanContinue; IsOver = source.IsOver;
             IsSettlementPending = source.IsSettlementPending; IsRevealPending = source.IsRevealPending;
-            IsDealPending = source.IsDealPending; Accusations = source.Accusations;
+            IsDealPending = source.IsDealPending;
+            Accusations = source.Accusations == null ? null : new HoldemAccusationDisplay(source.Accusations);
             PendingDeal = source.PendingDeal == null ? null : new HoldemDealDisplay(source.PendingDeal.WindowId, source.PendingDeal.Street);
             LegalActions = source.LegalActions == null ? null : new HoldemLegalDisplay(source.LegalActions);
             Result = source.Result == null ? null : new HoldemResultDisplay(source.Result);
@@ -82,6 +83,7 @@ namespace Poker.Presentation
             Street = (HoldemStreet)source.street; CanContinue = source.canContinue; IsOver = source.isOver;
             IsSettlementPending = source.settlementState == (int)HoldemSettlementState.AwaitingOddChipPriority;
             IsRevealPending = source.revealPending; IsDealPending = source.dealPending;
+            Accusations = source.hasAccusations ? new HoldemAccusationDisplay(source.accusations) : null;
             PendingDeal = !source.dealPending ? null : new HoldemDealDisplay(Guid.ParseExact(source.dealWindowId, "N"), (HoldemStreet)source.dealStreet);
             LegalActions = !source.hasLegal ? null : new HoldemLegalDisplay(source.legal);
             Result = !source.hasResult ? null : new HoldemResultDisplay(source.result);

@@ -11,16 +11,17 @@ namespace Poker.Foundation
         AwaitingConsequences = 4
     }
 
-    /// <summary>Viewer-relative intake state. No other seat's choice or dealer evidence is exposed.</summary>
+    /// <summary>Viewer-relative choice and own claim result. No other seat's choice or dealer record is exposed.</summary>
     public sealed class HoldemAccusationView
     {
         private readonly SeatId[] targets;
         internal HoldemAccusationView(Guid windowId, HoldemAccusationPhase phase, int eligibleCount,
-            int responseCount, bool canRespond, bool hasResponded, SeatId? ownTarget, SeatId[] targets)
+            int responseCount, bool canRespond, bool hasResponded, SeatId? ownTarget, SeatId[] targets,
+            bool? ownVerdict = null)
         {
             WindowId = windowId; Phase = phase; EligibleCount = eligibleCount; ResponseCount = responseCount;
             CanRespond = canRespond; HasResponded = hasResponded; OwnTarget = ownTarget;
-            this.targets = targets;
+            this.targets = targets; OwnVerdict = ownVerdict;
         }
         public Guid WindowId { get; }
         public HoldemAccusationPhase Phase { get; }
@@ -29,6 +30,8 @@ namespace Poker.Foundation
         public bool CanRespond { get; }
         public bool HasResponded { get; }
         public SeatId? OwnTarget { get; }
+        /// <summary>Result of this viewer's frozen claim only. Null means no recorded result, never a failed claim.</summary>
+        public bool? OwnVerdict { get; }
         public int TargetCount => targets.Length;
         public SeatId GetTargetAt(int index)
         {
@@ -155,7 +158,7 @@ namespace Poker.Foundation
             if (own >= 0) foreach (var seat in eligible) if (seat != viewer) targets.Add(seat);
             return new HoldemAccusationView(Id, Phase, eligible.Length, responded,
                 own >= 0 && Phase == HoldemAccusationPhase.Collecting, own >= 0 && choices[own] != null,
-                own >= 0 ? choices[own]?.Target : null, targets.ToArray());
+                own >= 0 ? choices[own]?.Target : null, targets.ToArray(), own >= 0 ? verdicts[own] : null);
         }
         private int IndexOf(SeatId seat) => Array.IndexOf(eligible, seat);
         private int ClaimIndex(Guid claimId)

@@ -78,7 +78,11 @@ namespace Poker.Foundation.Tests
             Assert.That(decision.Claim.Accuser, Is.EqualTo(A)); Assert.That(decision.Claim.Target, Is.EqualTo(B));
             Assert.That(decision.WasManipulated, Is.EqualTo(verdict));
             Assert.That(beforeDecisions, Is.Empty, "Previously returned host records must stay immutable.");
-            Assert.That(typeof(HoldemAccusationView).GetProperty("OwnVerdict"), Is.Null);
+            Assert.That(Read(session).Accusations.OwnVerdict, Is.EqualTo(verdict));
+            Assert.That(v.Accusations.OwnVerdict, Is.Null, "Earlier snapshots stay immutable.");
+            foreach (var other in new[] { B, C, D })
+                Assert.That(session.GetSnapshot(other).Accusations.OwnVerdict, Is.Null,
+                    "A verdict belongs to the accuser, not the target or observers.");
             Assert.That(typeof(HoldemAccusationView).GetProperty("Decisions"), Is.Null);
             Assert.That(typeof(HoldemSnapshot).GetProperty("AccusationDecisions"), Is.Null);
             Assert.That(Read(session).Accusations.Phase, Is.EqualTo(HoldemAccusationPhase.AwaitingConsequences));

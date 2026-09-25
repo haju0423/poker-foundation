@@ -23,11 +23,12 @@ namespace Poker.Foundation.Tests
         public void Setup() => Create();
 
         private void Create(HoldemConfig config = null, IRandomSource random = null, HoldemUtterancePolicy utterancePolicy = null,
-            int seatCapacity = HoldemRoom.Capacity)
+            int seatCapacity = HoldemRoom.Capacity, HoldemAccusationEvidenceScope? accusationEvidenceScope = null)
         {
             for (int i = 0; i < 4; i++) { identities[i] = new HoldemClientIdentity("참가자 " + (i + 1)); replies[i].Clear(); }
             server = new HoldemTcpServer(identities[0], config ?? new HoldemConfig(100, 1, 2), new SeatId(1),
-                random ?? new StableRandom(), utterancePolicy: utterancePolicy, seatCapacity: seatCapacity);
+                random ?? new StableRandom(), utterancePolicy: utterancePolicy, seatCapacity: seatCapacity,
+                accusationEvidenceScope: accusationEvidenceScope);
         }
 
         [TearDown]

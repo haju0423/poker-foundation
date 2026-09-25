@@ -7,6 +7,10 @@ using Poker.Transport;
 
 namespace Poker.Runtime
 {
+    public interface IHoldemRemoteAccusationPort
+    {
+        void Accuse(HoldemTableDisplay basis, SeatId? target);
+    }
     public interface IHoldemRemoteTablePort
     {
         HoldemTableDisplay Read();
@@ -39,7 +43,7 @@ namespace Poker.Runtime
 
     /// <summary>Owns its current client. One outstanding intent, no optimistic chip state. Poll/events stay on the UI thread.</summary>
     public sealed class HoldemRemoteTablePort : IHoldemRemoteTablePort, IHoldemRemoteUtteranceSource, IHoldemHistoryPort,
-        IHoldemConnectionPresence, IHoldemRoomInfoSource, IHoldemPublicUtteranceSource, IDisposable
+        IHoldemConnectionPresence, IHoldemRoomInfoSource, IHoldemPublicUtteranceSource, IHoldemRemoteAccusationPort, IDisposable
     {
         private HoldemTcpClient client;
         private readonly Action reconnect;
@@ -90,7 +94,7 @@ namespace Poker.Runtime
         }
         public bool CanSend => !disposed && !invalidState && !awaitingFreshState && !LobbyLeaveConfirmed && client.IsAdmitted && Lobby != null && !Lobby.Paused && pending == null;
         private bool IsPauseGuardedInput => pending != null && (pending.type == "act" || pending.type == "start"
-            || pending.type == "deal" || pending.type == "reveal" || pending.type == "settle");
+            || pending.type == "deal" || pending.type == "reveal" || pending.type == "settle" || pending.type == "accusation");
         private bool HasPauseDeferredInput => pending != null && pendingPauseRevision >= 0;
         private bool CanConfirmDeferredInput => HasPauseDeferredInput && !invalidState && !awaitingFreshState
             && client.IsAdmitted && Lobby?.Paused == false && observedRevision > pendingPauseRevision;
@@ -170,6 +174,7 @@ namespace Poker.Runtime
                         throw new ArgumentException("Confirmed room rules changed.");
                     var nextDisplay = latest.hasGame ? new HoldemTableDisplay(latest) : null;
                     ValidateRevealFeedback(display, nextDisplay);
+                    HoldemAccusationDisplay.ValidateTransition(display, nextDisplay);
                     if (Lobby != null && (Lobby.HasRematch != nextLobby.HasRematch
                         || nextLobby.MatchNumber < Lobby.MatchNumber
                         || nextLobby.MatchNumber > Lobby.MatchNumber && (display?.IsOver != true || nextDisplay == null
@@ -215,7 +220,7 @@ namespace Poker.Runtime
             }
             if (!awaitingFreshState && pending != null && display != null)
             {
-                bool priorHand = (pending.type == "act" || pending.type == "deal" || pending.type == "reveal" || pending.type == "settle")
+                bool priorHand = (pending.type == "act" || pending.type == "deal" || pending.type == "reveal" || pending.type == "settle" || pending.type == "accusation")
                     && pending.handId != display.HandId.ToString("N");
                 bool readyAfterStart = pending.type == "ready" && Lobby.HasGame
                     || pending.type == "rematch-ready" && pending.handId != display.HandId.ToString("N");
@@ -265,6 +270,15 @@ namespace Poker.Runtime
         {
             if (action == null) throw new ArgumentNullException(nameof(action));
             var request = Request("act", basis); request.action = (int)action.Kind; request.target = action.Target;
+            Submit(request);
+        }
+        public void Accuse(HoldemTableDisplay basis, SeatId? target)
+        {
+            if (basis?.Accusations?.CanRespond != true) return;
+            var request = Request("accusation", basis);
+            request.windowId = basis.Accusations.WindowId.ToString("N");
+            request.street = (int)basis.Street; request.accusationTarget = target?.Value ?? 0;
+            // Only a correlated receipt confirms this intent. An equal displayed target may be an earlier choice.
             Submit(request);
         }
         public void SetReady(bool ready)

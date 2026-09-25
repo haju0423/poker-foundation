@@ -256,13 +256,19 @@ namespace Poker.Runtime.Tests
             double deadline = Time.realtimeSinceStartupAsDouble + 30;
             while (boot.Progress.Street != HoldemStreet.Complete && Time.realtimeSinceStartupAsDouble < deadline)
             {
-                var passive = Root.Q<Button>("omc-passive");
-                if (passive.enabledInHierarchy && passive.resolvedStyle.display != DisplayStyle.None) Submit(passive);
+                // Keep the human's unused stack. Calling every random production-NPC raise can
+                // correctly end the entire match in hand 1, which has no next-hand button.
+                var fold = Root.Q<Button>("omc-fold");
+                if (fold.enabledInHierarchy && fold.resolvedStyle.display != DisplayStyle.None) Submit(fold);
                 yield return null;
             }
             Assert.That(boot.Progress.Street, Is.EqualTo(HoldemStreet.Complete));
             long hand = boot.Progress.HandNumber;
-            yield return Wait(() => Root.Q<Button>("omc-next").enabledInHierarchy);
+            yield return null;
+            var settle = Root.Q<Button>("omc-resolve");
+            if (settle.resolvedStyle.display != DisplayStyle.None) yield return Click("omc-resolve");
+            yield return Wait(() => Root.Q<Button>("omc-next").enabledInHierarchy
+                && Root.Q<Button>("omc-next").resolvedStyle.display != DisplayStyle.None);
             yield return Click("omc-next");
             Assert.That(boot.Progress.HandNumber, Is.EqualTo(hand + 1));
         }

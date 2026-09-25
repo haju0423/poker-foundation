@@ -18,6 +18,9 @@ namespace Poker.Transport
         public bool supportsThreePlayerRooms;
         public bool supportsPublicUtterances;
         public bool supportsRematch;
+        public bool supportsAccusations;
+        // Accusation target only. Zero means pass; sender identity comes from the admitted connection.
+        public int accusationTarget;
         public string completedHandId;
         public long rematchRevision;
     }
@@ -66,7 +69,7 @@ namespace Poker.Transport
         {
             protocol = HoldemRoomPacketMapper.ProtocolVersion, type = "admit", id = Guid.NewGuid().ToString("N"),
             name = Name, admissionKey = AdmissionKey, sessionId = SessionId ?? "", supportsThreePlayerRooms = true,
-            supportsPublicUtterances = true, supportsRematch = true
+            supportsPublicUtterances = true, supportsRematch = true, supportsAccusations = true
         };
     }
 }

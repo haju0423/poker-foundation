@@ -30,6 +30,8 @@ namespace Poker.Runtime
         public bool IsHosting => server != null;
         /// <summary>Only the hosting process receives this capability. It is never a player wire endpoint.</summary>
         public IHoldemDealerTurnPort DealerTurns => !disposed && !failed ? server : null;
+        /// <summary>Local host authority; guests cannot close a window or supply its verdict.</summary>
+        public IHoldemAccusationResolutionPort Accusations => !disposed && !failed ? server : null;
         /// <summary>
         /// Optional host-only asynchronous mailbox. Access and Poll on the game thread; worker code
         /// may only post completion. Owned by this connection, so leaving or stopping closes it.
@@ -68,7 +70,8 @@ namespace Poker.Runtime
 
         /// <summary>An injected deck source remains caller-owned; normal rooms use owned OS randomness.</summary>
         public bool Host(string name, string ip, int requestedPort, bool trustedLan, HoldemConfig config,
-            IRandomSource deckRandom = null, HoldemUtterancePolicy utterancePolicy = null, int seatCapacity = HoldemRoom.Capacity)
+            IRandomSource deckRandom = null, HoldemUtterancePolicy utterancePolicy = null, int seatCapacity = HoldemRoom.Capacity,
+            HoldemAccusationEvidenceScope? accusationEvidenceScope = null)
         {
             if (disposed || HasSession) return false;
             try
@@ -84,7 +87,8 @@ namespace Poker.Runtime
                 var candidate = new HoldemClientIdentity(name?.Trim());
                 if (deckRandom == null) deckRandom = random = new PracticeRandom();
                 server = new HoldemTcpServer(candidate, config, new SeatId(1), deckRandom,
-                    new IPEndPoint(bind, requestedPort), trustedLan, utterancePolicy: utterancePolicy, seatCapacity: seatCapacity);
+                    new IPEndPoint(bind, requestedPort), trustedLan, utterancePolicy: utterancePolicy, seatCapacity: seatCapacity,
+                    accusationEvidenceScope: accusationEvidenceScope);
                 identity = candidate; address = server.Endpoint.Address; port = server.Endpoint.Port;
                 Connect(); return true;
             }

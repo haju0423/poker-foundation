@@ -64,6 +64,18 @@ namespace Poker.Application
         public int seatCapacity;
         public long startingStack, smallBlind, bigBlind;
         public bool waitsForHostDeal, pausesAfterReveal, receivesUtterances, publishesUtterances;
+        public bool accusationsEnabled;
+    }
+
+    // This viewer's choice and result only. No other claims, decisions, AI output or manipulation ledger.
+    [Serializable]
+    public sealed class HoldemAccusationPacket
+    {
+        public string windowId;
+        public int phase, eligibleCount, responseCount;
+        public bool canRespond, hasResponded, hasOwnTarget, hasOwnVerdict, ownVerdict;
+        public int ownTarget;
+        public int[] targets;
     }
 
     [Serializable]
@@ -114,6 +126,8 @@ namespace Poker.Application
     [Serializable]
     public sealed class HoldemGamePacket
     {
+        public bool hasAccusations;
+        public HoldemAccusationPacket accusations;
         public string handId;
         public long version, handNumber, pot;
         public int street, settlementState, button, smallBlind, bigBlind, currentSeat, sessionWinner;
@@ -222,7 +236,7 @@ namespace Poker.Application
                 packet.rules = new HoldemRoomRulesPacket { seatCapacity = rules.SeatCapacity, startingStack = rules.StartingStack,
                     smallBlind = rules.SmallBlind, bigBlind = rules.BigBlind, waitsForHostDeal = rules.WaitsForHostDeal,
                     pausesAfterReveal = rules.PausesAfterReveal, receivesUtterances = rules.ReceivesUtterances,
-                    publishesUtterances = rules.PublishesUtterances };
+                    publishesUtterances = rules.PublishesUtterances, accusationsEnabled = rules.AccusationsEnabled };
             }
             for (int i = 0; i < packet.members.Length; i++)
             {
@@ -290,6 +304,18 @@ namespace Poker.Application
                 hasLegal = source.LegalActions != null, hasResult = source.Result != null,
                 board = Cards(source.BoardCount, source.GetBoardCard), seats = new HoldemSeatPacket[source.SeatCount]
             };
+            if (source.Accusations != null)
+            {
+                var a = source.Accusations;
+                packet.hasAccusations = true;
+                packet.accusations = new HoldemAccusationPacket { windowId = a.WindowId.ToString("N"),
+                    phase = (int)a.Phase, eligibleCount = a.EligibleCount, responseCount = a.ResponseCount,
+                    canRespond = a.CanRespond, hasResponded = a.HasResponded,
+                    hasOwnTarget = a.OwnTarget.HasValue, ownTarget = a.OwnTarget?.Value ?? 0,
+                    hasOwnVerdict = a.OwnVerdict.HasValue, ownVerdict = a.OwnVerdict ?? false,
+                    targets = new int[a.TargetCount] };
+                for (int i = 0; i < a.TargetCount; i++) packet.accusations.targets[i] = a.GetTargetAt(i).Value;
+            }
             for (int i = 0; i < packet.seats.Length; i++)
             {
                 var s = source.GetSeatAt(i);

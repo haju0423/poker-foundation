@@ -28,6 +28,7 @@ namespace Poker.Runtime
         private readonly Func<HoldemDealCommand, HoldemReceipt> dealUnchanged;
         private readonly string dealPendingPrompt;
         private readonly IHoldemAccusationPlayerPort accusationPort;
+        private readonly IHoldemRemoteAccusationPort remoteAccusations;
         private readonly IHoldemUtterancePlayerPort utterancePort;
         private readonly IHoldemPublicUtteranceSource publicUtteranceSource;
         private bool PublishesUtterances => roomInfo?.RoomRules?.PublishesUtterances == true
@@ -104,6 +105,7 @@ namespace Poker.Runtime
         {
             this.root = root ?? throw new ArgumentNullException(nameof(root));
             this.remote = remote ?? throw new ArgumentNullException(nameof(remote));
+            remoteAccusations = remote as IHoldemRemoteAccusationPort;
             connectionPresence = remote as IHoldemConnectionPresence;
             roomInfo = remote as IHoldemRoomInfoSource;
             historyPort = remote as IHoldemHistoryPort;
@@ -575,7 +577,9 @@ namespace Poker.Runtime
             {
                 if (remote.StatusText.Length > 0) prompt.text = remote.StatusText;
                 else if (view.IsDealPending && !remote.IsHost) prompt.text = "방장이 다음 공용 카드를 공개할 때까지 기다려 주세요.";
-                else if (view.IsRevealPending && !remote.IsHost) prompt.text = "공용 카드를 확인해 주세요. 방장이 계속을 누르면 진행해요.";
+                else if (view.IsRevealPending && !remote.IsHost && (view.Accusations == null
+                    || view.Accusations.Phase == HoldemAccusationPhase.ClosedWithoutClaims))
+                    prompt.text = "공용 카드를 확인해 주세요. 방장이 계속을 누르면 진행해요.";
                 else if (pending && !remote.IsHost) prompt.text = "방장이 남은 칩을 정산하면 결과가 나와요.";
                 else if (complete && view.CanContinue && !remote.IsHost) prompt.text = view.OwnStack == 0
                     ? "칩을 모두 잃었어요. 방장이 다음 판을 시작하면 관전해요."
@@ -622,9 +626,9 @@ namespace Poker.Runtime
         private void RenderAccusations()
         {
             var state = view.Accusations;
-            bool visible = state != null && state.CanRespond && accusationPort != null && !paused;
+            bool visible = state != null && state.CanRespond && (accusationPort != null || remoteAccusations != null) && !paused;
             Show(accusationRow, visible);
-            bool enabled = visible && Time.realtimeSinceStartupAsDouble >= lockedUntil;
+            bool enabled = visible && NetworkCanSend && Time.realtimeSinceStartupAsDouble >= lockedUntil;
             accusationRow.SetEnabled(enabled);
             if (!visible) return;
             if (targetWindow != state.WindowId)
@@ -643,7 +647,8 @@ namespace Poker.Runtime
 
         private void ChooseAccusation(bool claim)
         {
-            if (!CanInteract() || accusationPort == null || view.Accusations == null || !view.Accusations.CanRespond) return;
+            if (!CanInteract() || accusationPort == null && remoteAccusations == null
+                || view.Accusations == null || !view.Accusations.CanRespond) return;
             SeatId? target = null;
             if (claim)
             {
@@ -651,6 +656,7 @@ namespace Poker.Runtime
                 if (index < 0 || index >= accusationTargets.Count) return;
                 target = accusationTargets[index];
             }
+            if (remoteAccusations != null) { remoteAccusations.Accuse(view, target); return; }
             var command = new HoldemAccusationChoiceCommand(view.SessionId, view.HandId, view.Accusations.WindowId,
                 Guid.NewGuid(), view.SessionVersion, view.Street, view.ViewerSeat, target);
             Run(() => accusationPort.SubmitAccusationChoice(command));
@@ -891,7 +897,8 @@ namespace Poker.Runtime
             if (state != null && state.Phase == HoldemAccusationPhase.AwaitingVerdicts)
                 return "고발 접수 완료 · 판정을 기다리고 있어요.";
             if (state != null && state.Phase == HoldemAccusationPhase.AwaitingConsequences)
-                return "판정 완료 · 결과 처리를 기다리고 있어요.";
+                return (state.OwnVerdict.HasValue ? state.OwnVerdict.Value ? "내 고발 적중" : "내 고발 오적중" : "판정 완료")
+                    + " · 고발 정산 규칙 대기 (개발용)";
             if (state != null && state.Phase == HoldemAccusationPhase.Collecting)
             {
                 string choice = !state.CanRespond ? "다른 참가자의 선택을 기다리고 있어요."

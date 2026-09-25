@@ -54,6 +54,7 @@ namespace Poker.Presentation
                 var best = new HashSet<int>(); foreach (int card in s.revealedBestCards) Require(Card(card) && best.Add(card) && available.Contains(card));
             }
             Require(foundViewer && (g.currentSeat == 0 || seatIds.Contains(g.currentSeat)));
+            ValidateAccusations(p);
             Require(seatIds.Contains(g.button) && seatIds.Contains(g.smallBlind) && seatIds.Contains(g.bigBlind)
                 && (g.sessionWinner == 0 || seatIds.Contains(g.sessionWinner)));
             if (p.hasRules) ValidateChipTotal(p, capacity);
@@ -110,6 +111,34 @@ namespace Poker.Presentation
                 }
             }
         }
+        private static void ValidateAccusations(HoldemRoomPacket p)
+        {
+            var g = p.game;
+            bool enabled = p.hasRules && p.rules.accusationsEnabled;
+            Require(g.hasAccusations == (enabled && g.revealPending));
+            if (!g.hasAccusations) return;
+            Require(p.rules.waitsForHostDeal && p.rules.pausesAfterReveal && p.rules.receivesUtterances && p.rules.publishesUtterances
+                && !g.dealPending && !g.hasLegal && !g.hasResult && !g.canContinue && !g.isOver
+                && g.currentSeat == 0 && g.street >= 1 && g.street <= 3);
+            var a = g.accusations;
+            Require(a != null && Id(a.windowId) && a.phase >= 1 && a.phase <= 4 && a.targets != null);
+            var eligible = new HashSet<int>();
+            foreach (var s in g.seats) if (s.dealtIn && s.status != 2) eligible.Add(s.seat);
+            bool viewerEligible = eligible.Contains(p.viewerSeat);
+            Require(a.eligibleCount == eligible.Count && a.eligibleCount >= 2
+                && a.responseCount >= 0 && a.responseCount <= a.eligibleCount
+                && a.canRespond == (viewerEligible && a.phase == 1)
+                && (!a.hasResponded || viewerEligible && a.responseCount > 0)
+                && a.targets.Length == (viewerEligible ? eligible.Count - 1 : 0));
+            var targets = new HashSet<int>();
+            foreach (int target in a.targets) Require(target != p.viewerSeat && eligible.Contains(target) && targets.Add(target));
+            Require(a.hasOwnTarget ? a.hasResponded && targets.Contains(a.ownTarget) : a.ownTarget == 0);
+            Require(a.hasOwnVerdict ? a.hasOwnTarget && a.phase >= 3 : !a.ownVerdict);
+            if (a.phase != 1) Require(a.responseCount == a.eligibleCount && a.hasResponded == viewerEligible);
+            if (a.phase == 2) Require(!a.hasOwnTarget && !a.hasOwnVerdict);
+            if (a.phase == 4 && a.hasOwnTarget) Require(a.hasOwnVerdict);
+        }
+
         private static void ValidateChipTotal(HoldemRoomPacket p, int capacity)
         {
             Require(p.rules.startingStack > 0 && p.rules.startingStack <= long.MaxValue / capacity);

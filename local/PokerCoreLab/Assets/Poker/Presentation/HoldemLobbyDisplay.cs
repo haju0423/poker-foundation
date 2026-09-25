@@ -47,8 +47,11 @@ namespace Poker.Presentation
                 var r = packet.rules ?? throw new ArgumentException("Missing room rules.");
                 Rules = new HoldemRoomRules(new HoldemConfig(r.startingStack, r.smallBlind, r.bigBlind,
                     r.pausesAfterReveal ? HoldemRevealPolicy.PauseAfterCommunityReveal : HoldemRevealPolicy.Automatic,
+                    r.accusationsEnabled ? HoldemAccusationMode.CollectLatestChoiceUntilHostCloses : HoldemAccusationMode.Disabled,
                     dealPolicy: r.waitsForHostDeal ? HoldemDealPolicy.WaitForHost : HoldemDealPolicy.Automatic),
                     r.receivesUtterances, r.seatCapacity == 0 ? HoldemRoom.Capacity : r.seatCapacity, r.publishesUtterances);
+                if (r.accusationsEnabled && (!r.waitsForHostDeal || !r.receivesUtterances || !r.publishesUtterances))
+                    throw new ArgumentException("Accusation preview requires host dealing and public speech.");
                 if (packet.hasGame && r.receivesUtterances != packet.hasOwnUtterances)
                     throw new ArgumentException("Room intake capability is inconsistent.");
                 if (packet.hasPublicUtterances != (packet.hasGame && r.publishesUtterances))

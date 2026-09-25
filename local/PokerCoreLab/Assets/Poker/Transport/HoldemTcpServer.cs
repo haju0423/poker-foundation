@@ -15,7 +15,7 @@ namespace Poker.Transport
     /// Development transport for loopback or an explicitly selected trusted LAN interface. No TLS, relay or NAT traversal.
     /// Call Pump and host integration methods on one owning game thread; socket workers only handle framed bytes.
     /// </summary>
-    public sealed class HoldemTcpServer : IDisposable, IHoldemDealerDealApplicationPort
+    public sealed class HoldemTcpServer : IDisposable, IHoldemDealerDealApplicationPort, IHoldemAccusationResolutionPort
     {
         private const int MaximumAdmissionIdentities = 256;
         public const int MaximumCloseRecords = 32;
@@ -25,6 +25,7 @@ namespace Poker.Transport
         private readonly Guid sessionId;
         private readonly string hostKeyHash;
         private readonly bool publishesUtterances;
+        private readonly bool accusationsEnabled;
         private readonly List<Peer> peers = new List<Peer>();
         private readonly Dictionary<string, Admission> admissions = new Dictionary<string, Admission>();
         private readonly Stopwatch clock = Stopwatch.StartNew();
@@ -67,7 +68,8 @@ namespace Poker.Transport
         public HoldemTcpServer(HoldemClientIdentity hostIdentity, HoldemConfig config, SeatId initialButton,
             IRandomSource deckRandom, IPEndPoint endpoint = null, bool allowTrustedLan = false,
             HoldemOddChipRule oddChipRule = HoldemOddChipRule.RequireExplicitPriority,
-            HoldemUtterancePolicy utterancePolicy = null, int seatCapacity = HoldemRoom.Capacity)
+            HoldemUtterancePolicy utterancePolicy = null, int seatCapacity = HoldemRoom.Capacity,
+            HoldemAccusationEvidenceScope? accusationEvidenceScope = null)
         {
             if (hostIdentity == null) throw new ArgumentNullException(nameof(hostIdentity));
             ValidateUtterancePolicy(utterancePolicy, seatCapacity);
@@ -77,7 +79,8 @@ namespace Poker.Transport
             sessionId = Guid.NewGuid();
             Guid reservedHost = Guid.NewGuid();
             room = HoldemRoom.Create(sessionId, reservedHost, hostIdentity.Name, config, initialButton, deckRandom,
-                out var hostAdmission, oddChipRule, utterancePolicy, seatCapacity);
+                out var hostAdmission, oddChipRule, utterancePolicy, seatCapacity, accusationEvidenceScope);
+            accusationsEnabled = room.Read(reservedHost).Rules.AccusationsEnabled;
             room.Disconnect(reservedHost);
             hostKeyHash = KeyHash(hostIdentity.AdmissionKey);
             admissions.Add(hostKeyHash, new Admission
@@ -185,6 +188,14 @@ namespace Poker.Transport
                 HoldemRoomReceipt result;
                 switch (request.type)
                 {
+                    case "accusation":
+                        if (!TryId(request.windowId, out var accusationWindow)
+                            || request.accusationTarget < 0 || request.accusationTarget > room.SeatCapacity)
+                        { Error(peer, request.id, "MalformedRequest"); return; }
+                        result = room.SubmitAccusation(peer.Connection, new HoldemRoomAccusation(sessionId, hand,
+                            accusationWindow, id, request.version, (HoldemStreet)request.street,
+                            request.accusationTarget == 0 ? (SeatId?)null : new SeatId(request.accusationTarget)));
+                        break;
                     case "act":
                         result = room.Submit(peer.Connection, new HoldemRoomAction(sessionId, hand, id, request.version, Action(request)));
                         break;
@@ -218,6 +229,8 @@ namespace Poker.Transport
 
         private void Admit(Peer peer, HoldemWireRequest request)
         {
+            if (accusationsEnabled && !request.supportsAccusations)
+            { Error(peer, request.id, "ClientUpgradeRequired"); return; }
             if (room.SeatCapacity == 3 && !request.supportsThreePlayerRooms)
             { Error(peer, request.id, "ClientUpgradeRequired"); return; }
             if (publishesUtterances && !request.supportsPublicUtterances)
@@ -231,7 +244,7 @@ namespace Poker.Transport
             {
                 if (cached.LeftCommandId != Guid.Empty) { Error(peer, request.id, "LobbyLeft"); return; }
                 if (cached.Name != request.name) { Error(peer, request.id, "IdentityConflict"); return; }
-                var resumed = room.Reconnect(peer.Connection, cached.ResumeToken, request.supportsRematch);
+                var resumed = room.Reconnect(peer.Connection, cached.ResumeToken, request.supportsRematch, request.supportsAccusations);
                 if (!resumed.Accepted) { Reply(peer, request.id, resumed.Error, null); return; }
                 cached.Connection = peer.Connection;
             }
@@ -240,7 +253,7 @@ namespace Poker.Transport
                 // A known session with a missing capability must never silently create a replacement seat.
                 if (!string.IsNullOrEmpty(request.sessionId)) { Error(peer, request.id, "InvalidIdentity"); return; }
                 if (admissions.Count >= MaximumAdmissionIdentities) { Error(peer, request.id, "AdmissionLimit"); return; }
-                var joined = room.Join(peer.Connection, request.name, request.supportsRematch);
+                var joined = room.Join(peer.Connection, request.name, request.supportsRematch, request.supportsAccusations);
                 if (!joined.Accepted) { Reply(peer, request.id, joined.Error, null); return; }
                 cached = new Admission { Name = request.name, Seat = joined.Admission.Seat.Value,
                     ResumeToken = joined.Admission.ResumeToken, Connection = peer.Connection };
@@ -330,6 +343,27 @@ namespace Poker.Transport
         {
             id = Guid.Empty;
             return value != null && value.Length == 32 && Guid.TryParseExact(value, "N", out id) && id != Guid.Empty;
+        }
+
+        /// <summary>In-process only. Neither closing nor supplied verdicts are accepted from the wire.</summary>
+        public HoldemRoomReceipt CloseAccusations(HoldemRoomAccusationClose input)
+        {
+            lock (gate)
+            {
+                if (disposed) throw new ObjectDisposedException(nameof(HoldemTcpServer));
+                ObserveClosedPeers();
+                return room.CloseAccusations(admissions[hostKeyHash].Connection, input);
+            }
+        }
+
+        public HoldemRoomAccusationResolution ResolveAccusations()
+        {
+            lock (gate)
+            {
+                if (disposed) throw new ObjectDisposedException(nameof(HoldemTcpServer));
+                ObserveClosedPeers();
+                return room.ResolveAccusations(admissions[hostKeyHash].Connection);
+            }
         }
 
         /// <summary>In-process host consumer only. No client request exposes this feed.</summary>

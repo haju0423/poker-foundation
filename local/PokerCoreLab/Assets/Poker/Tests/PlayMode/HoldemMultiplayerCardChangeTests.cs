@@ -69,11 +69,14 @@ namespace Poker.Runtime.Tests
             }
         }
 
-        private IEnumerator SetupChangedReveal()
+        private IEnumerator SetupChangedReveal(bool accusations = false)
         {
             yield return Cleanup();
             yield return SetupTable(new HoldemUtterancePolicy(64, 2, HoldemUtteranceSeats.Active, HoldemUtteranceVisibility.PublicRaw),
-                new HoldemConfig(100, 1, 2, HoldemRevealPolicy.PauseAfterCommunityReveal, dealPolicy: HoldemDealPolicy.WaitForHost));
+                new HoldemConfig(100, 1, 2, HoldemRevealPolicy.PauseAfterCommunityReveal,
+                    accusationMode: accusations ? HoldemAccusationMode.CollectLatestChoiceUntilHostCloses : HoldemAccusationMode.Disabled,
+                    dealPolicy: HoldemDealPolicy.WaitForHost),
+                accusationEvidenceScope: accusations ? HoldemAccusationEvidenceScope.CurrentRevealOnly : (HoldemAccusationEvidenceScope?)null);
             for (int i = 0; i < 4; i++)
             {
                 var old = textures[i]; textures[i] = new RenderTexture(960, 640, 24);

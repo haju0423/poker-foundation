@@ -967,7 +967,9 @@ namespace Poker.Runtime.Tests
             Assert.That(table.ResolveAccusation(claim.ClaimId, new FixedEvidence(HoldemDealerEvidence.ForClaim(claim, false))),
                 Is.EqualTo(HoldemEvidenceResolution.Recorded));
             screen.Render(); yield return null;
-            Assert.That(Root.Q<Label>(className: "omc-prompt").text, Does.Contain("결과 처리를 기다리고"));
+            Assert.That(Root.Q<Label>(className: "omc-prompt").text, Does.Contain("내 고발 오적중"));
+            Assert.That(Root.Q<Label>(className: "omc-prompt").text, Does.Contain("고발 정산 규칙 대기"));
+            Assert.That(table.Human.Read().Accusations.OwnVerdict, Is.False);
             Assert.That(table.Human.Read().OwnStack, Is.EqualTo(before.OwnStack));
             Assert.That(table.Human.Read().PotAmount, Is.EqualTo(before.PotAmount));
             Assert.That(table.Human.Read().Result, Is.Null);

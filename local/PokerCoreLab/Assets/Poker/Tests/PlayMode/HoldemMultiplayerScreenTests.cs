@@ -33,11 +33,12 @@ namespace Poker.Runtime.Tests
         [UnitySetUp]
         public IEnumerator Setup() => SetupTable();
 
-        private IEnumerator SetupTable(HoldemUtterancePolicy speechPolicy = null, HoldemConfig config = null, bool legacyRules = false)
+        private IEnumerator SetupTable(HoldemUtterancePolicy speechPolicy = null, HoldemConfig config = null, bool legacyRules = false,
+            HoldemAccusationEvidenceScope? accusationEvidenceScope = null)
         {
             for (int i = 0; i < 4; i++) identities[i] = new HoldemClientIdentity(i == 1 ? "<b>참가자 2</b>" : "참가자 " + (i + 1));
             server = new HoldemTcpServer(identities[0], config ?? new HoldemConfig(100, 1, 2), new SeatId(1), new StableRandom(),
-                utterancePolicy: speechPolicy);
+                utterancePolicy: speechPolicy, accusationEvidenceScope: accusationEvidenceScope);
             for (int i = 0; i < 4; i++)
             {
                 var connect = HoldemTcpClient.ConnectAsync(server.Endpoint.Address, server.Endpoint.Port, identities[i]);

@@ -37,20 +37,27 @@ namespace Poker.Application
         public HoldemRoom(Guid sessionId, Guid hostConnection, string hostName, HoldemConfig config,
             SeatId initialButton, IRandomSource deckRandom,
             HoldemOddChipRule oddChipRule = HoldemOddChipRule.RequireExplicitPriority,
-            HoldemUtterancePolicy utterancePolicy = null, int seatCapacity = Capacity)
+            HoldemUtterancePolicy utterancePolicy = null, int seatCapacity = Capacity,
+            HoldemAccusationEvidenceScope? accusationEvidenceScope = null)
         {
             RequireConnection(hostConnection); RequireName(hostName);
             if (config == null) throw new ArgumentNullException(nameof(config));
             HoldemRoomRules.ValidateSeatCapacity(seatCapacity);
             SeatCapacity = seatCapacity;
             seatActions = new HoldemActionNotice[seatCapacity];
-            if (config.AccusationMode != HoldemAccusationMode.Disabled)
-                throw new ArgumentException("This room currently supports base poker without accusation input.", nameof(config));
+            bool accusationsEnabled = config.AccusationMode != HoldemAccusationMode.Disabled;
+            if (accusationsEnabled != accusationEvidenceScope.HasValue
+                || accusationsEnabled && (accusationEvidenceScope != HoldemAccusationEvidenceScope.CurrentRevealOnly
+                    || config.DealPolicy != HoldemDealPolicy.WaitForHost
+                    || utterancePolicy?.Visibility != HoldemUtteranceVisibility.PublicRaw))
+                throw new ArgumentException("Accusation preview requires explicit current-reveal evidence, host dealing and public speech.", nameof(accusationEvidenceScope));
             var seats = new SeatId[seatCapacity];
             for (int i = 0; i < seats.Length; i++) seats[i] = new SeatId(i + 1);
             rules = new HoldemRoomRules(config, utterancePolicy != null, seatCapacity,
                 utterancePolicy?.Visibility == HoldemUtteranceVisibility.PublicRaw);
             session = new HoldemSession(sessionId, config, seats, initialButton, deckRandom, oddChipRule);
+            accusationResolver = accusationsEnabled ? new HoldemAccusationResolver(session,
+                new HoldemRecordedDealerEvidence(session, accusationEvidenceScope.Value)) : null;
             this.utterancePolicy = utterancePolicy;
             AddMember(hostConnection, hostName);
         }
@@ -59,18 +66,21 @@ namespace Poker.Application
         public static HoldemRoom Create(Guid sessionId, Guid hostConnection, string hostName, HoldemConfig config,
             SeatId initialButton, IRandomSource deckRandom, out HoldemRoomAdmission hostAdmission,
             HoldemOddChipRule oddChipRule = HoldemOddChipRule.RequireExplicitPriority,
-            HoldemUtterancePolicy utterancePolicy = null, int seatCapacity = Capacity)
+            HoldemUtterancePolicy utterancePolicy = null, int seatCapacity = Capacity,
+            HoldemAccusationEvidenceScope? accusationEvidenceScope = null)
         {
-            var room = new HoldemRoom(sessionId, hostConnection, hostName, config, initialButton, deckRandom, oddChipRule, utterancePolicy, seatCapacity);
+            var room = new HoldemRoom(sessionId, hostConnection, hostName, config, initialButton, deckRandom,
+                oddChipRule, utterancePolicy, seatCapacity, accusationEvidenceScope);
             hostAdmission = Admit(room.members[0]).Admission;
             return room;
         }
 
-        public HoldemRoomJoinResult Join(Guid connection, string name, bool supportsRematch = true)
+        public HoldemRoomJoinResult Join(Guid connection, string name, bool supportsRematch = true, bool supportsAccusations = false)
         {
             RequireConnection(connection); RequireName(name);
             lock (gate)
             {
+                if (rules.AccusationsEnabled && !supportsAccusations) return JoinError(HoldemRoomError.ClientUpgradeRequired);
                 if (connections.TryGetValue(connection, out var existing))
                     return existing.Connected ? Admit(existing) : JoinError(HoldemRoomError.Disconnected);
                 if (session.CurrentHandId.HasValue) return JoinError(HoldemRoomError.AlreadyStarted);
@@ -205,11 +215,12 @@ namespace Poker.Application
             }
         }
 
-        public HoldemRoomJoinResult Reconnect(Guid newConnection, string resumeToken, bool supportsRematch = true)
+        public HoldemRoomJoinResult Reconnect(Guid newConnection, string resumeToken, bool supportsRematch = true, bool supportsAccusations = false)
         {
             RequireConnection(newConnection);
             lock (gate)
             {
+                if (rules.AccusationsEnabled && !supportsAccusations) return JoinError(HoldemRoomError.ClientUpgradeRequired);
                 if (resumeToken == null || resumeToken.Length != 44) return JoinError(HoldemRoomError.InvalidResumeToken);
                 byte[] secret;
                 try { secret = Convert.FromBase64String(resumeToken ?? ""); }

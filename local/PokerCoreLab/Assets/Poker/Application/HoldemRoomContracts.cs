@@ -8,7 +8,7 @@ namespace Poker.Application
         None, UnknownConnection, Disconnected, Full, AlreadyStarted, HostOnly,
         WaitingForPlayers, PlayersNotReady, Paused, InvalidResumeToken,
         ConnectionInUse, MemberStillConnected, CoreRejected, HostCannotLeave, UtteranceRejected,
-        MatchNotOver, StaleRematchConsent, ClientUpgradeRequired, CommandConflict
+        MatchNotOver, StaleRematchConsent, ClientUpgradeRequired, CommandConflict, AccusationsDisabled
     }
 
     /// <summary>Deliver only to the admitted connection. ResumeToken is a bearer secret, not public room state.</summary>
@@ -88,6 +88,7 @@ namespace Poker.Application
             PausesAfterReveal = config.RevealPolicy == HoldemRevealPolicy.PauseAfterCommunityReveal;
             ReceivesUtterances = receivesUtterances;
             PublishesUtterances = publishesUtterances;
+            AccusationsEnabled = config.AccusationMode != HoldemAccusationMode.Disabled;
         }
         public long StartingStack { get; }
         public int SeatCapacity { get; }
@@ -101,10 +102,12 @@ namespace Poker.Application
         public bool PausesAfterReveal { get; }
         public bool ReceivesUtterances { get; }
         public bool PublishesUtterances { get; }
+        public bool AccusationsEnabled { get; }
         public bool Matches(HoldemRoomRules other) => other != null && SeatCapacity == other.SeatCapacity && StartingStack == other.StartingStack
             && SmallBlind == other.SmallBlind && BigBlind == other.BigBlind
             && WaitsForHostDeal == other.WaitsForHostDeal && PausesAfterReveal == other.PausesAfterReveal
-            && ReceivesUtterances == other.ReceivesUtterances && PublishesUtterances == other.PublishesUtterances;
+            && ReceivesUtterances == other.ReceivesUtterances && PublishesUtterances == other.PublishesUtterances
+            && AccusationsEnabled == other.AccusationsEnabled;
     }
 
     /// <summary>One connection's projection. Never broadcast this object to the other three connections.</summary>
