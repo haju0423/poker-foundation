@@ -44,6 +44,11 @@ namespace Poker.Runtime
         internal static void AttachIfRequested(HoldemMultiplayerBootstrap owner)
         {
             if (!UnityEngine.Application.isBatchMode || !IsRequested) return;
+            if (Argument("-omc-peer-scenario") == "accusation-app")
+            {
+                owner.gameObject.AddComponent<HoldemAccusationAppProcessCheck>().Initialize(owner);
+                return;
+            }
             var check = owner.gameObject.AddComponent<HoldemMultiplayerProcessCheck>(); check.bootstrap = owner;
         }
         private void Start()

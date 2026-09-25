@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Text;
 using Poker.Presentation;
 using Poker.Transport;
+using Poker.Application;
+using Poker.Foundation;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -15,6 +17,9 @@ namespace Poker.Runtime
         [SerializeField] private HoldemMultiplayerSettings settings;
         private HoldemMultiplayerConnection connection;
         private HoldemTableScreen screen;
+        private HoldemMultiplayerDealerDebug dealerDebug;
+        private bool accusationDebug;
+        public bool EnableAccusationDebug { get; set; }
         private VisualElement root, lobby, form, tableSurface, connectionBar, confirmation;
         private TextField nickname, address, port, startingStack, smallBlind, bigBlind;
         private Foldout setup;
@@ -55,6 +60,7 @@ namespace Poker.Runtime
 
         private void OnEnable()
         {
+            accusationDebug = EnableAccusationDebug;
             var document = GetComponent<UIDocument>();
             font = Resources.Load<Font>("Fonts/NanumGothic-Regular");
             var sheet = Resources.Load<StyleSheet>("HoldemLobby");
@@ -110,9 +116,11 @@ namespace Poker.Runtime
             root.Add(lobbyScroll); lobby = lobbyScroll;
             Text(lobby, "One More Card", "omc-lobby-title");
             subtitle = Text(lobby, "4인 텍사스 홀덤", "omc-lobby-subtitle");
-            if (settings.enableFlowPreview)
+            if (settings.enableFlowPreview || accusationDebug)
             {
-                previewNotice = Text(lobby, "개발용 진행 확인 · 멘트 공개 범위는 방 설정을 따라요. AI나 카드에는 반영되지 않아요.", "omc-lobby-hint");
+                previewNotice = Text(lobby, accusationDebug
+                    ? "멀티 고발 테스트 · 고정 카드 / 방장 수동 처리 / 실제 AI·고발 정산 없음"
+                    : "개발용 진행 확인 · 멘트 공개 범위는 방 설정을 따라요. AI나 카드에는 반영되지 않아요.", "omc-lobby-hint");
                 previewNotice.name = "omc-flow-preview-notice";
             }
             form = Box(lobby, "omc-lobby-form");
@@ -199,7 +207,10 @@ namespace Poker.Runtime
             {
                 if (!TrySetupConfig(out var config, out formError)) { Render(); return; }
                 connection.Host(nickname.value, selectedAddress, selectedPort, lan.value, config,
-                    utterancePolicy: settings.CreateUtterancePolicy(), seatCapacity: SelectedCapacity);
+                    deckRandom: accusationDebug ? new HoldemLocalDealerDebug.OrderedDeck() : null,
+                    utterancePolicy: accusationDebug ? HoldemMultiplayerDealerDebug.CreateUtterancePolicy(settings) : settings.CreateUtterancePolicy(),
+                    seatCapacity: SelectedCapacity,
+                    accusationEvidenceScope: accusationDebug ? HoldemAccusationEvidenceScope.CurrentRevealOnly : (HoldemAccusationEvidenceScope?)null);
             }
             else connection.Join(nickname.value, selectedAddress, selectedPort, lan.value);
             if (connection.HasSession)
@@ -238,7 +249,9 @@ namespace Poker.Runtime
             else if (!PositiveChips(bigBlind.value, out var big)) error = "빅 블라인드는 1 이상의 정수로 입력해 주세요.";
             else if (small > big) error = "빅 블라인드는 스몰 블라인드 이상이어야 해요.";
             else if (stack > long.MaxValue / SelectedCapacity) error = "시작 칩이 너무 커요. 더 작은 금액을 입력해 주세요.";
-            else config = settings.CreateConfig(stack, small, big, SelectedCapacity);
+            else config = accusationDebug ? new HoldemConfig(stack, small, big, HoldemRevealPolicy.PauseAfterCommunityReveal,
+                HoldemAccusationMode.CollectLatestChoiceUntilHostCloses, HoldemDealPolicy.WaitForHost)
+                : settings.CreateConfig(stack, small, big, SelectedCapacity);
             return config != null;
         }
         private int SelectedCapacity => seatCapacity?.index == 0 ? 3 : seatCapacity?.index == 1 ? 4 : 0;
@@ -279,7 +292,13 @@ namespace Poker.Runtime
                     { leavingLobby = false; leaveError = remote.ErrorText; }
                 }
                 if (screen == null && connection.Remote?.HasGame == true)
-                    screen = new HoldemTableScreen(tableSurface, connection.Remote, font);
+                {
+                    bool debugHost = accusationDebug && connection.IsHosting;
+                    screen = new HoldemTableScreen(tableSurface, connection.Remote, font, hostDealerControlled: debugHost);
+                    if (debugHost) dealerDebug = new HoldemMultiplayerDealerDebug(connection, screen,
+                        () => isActiveAndEnabled && !confirming && !rematchOpen && !failed);
+                }
+                dealerDebug?.Tick();
                 Render();
             }
             catch (Exception e)
@@ -289,7 +308,8 @@ namespace Poker.Runtime
         }
         private void StopProgress(Exception error)
         {
-            failed = true; leavingLobby = false; connection.StopForError(); screen?.StopProgress();
+            failed = true; leavingLobby = false; dealerDebug?.Dispose(); dealerDebug = null;
+            connection.StopForError(); screen?.StopProgress();
             Render();
             Debug.LogError("Multiplayer progression paused (" + error.GetType().Name + ").");
         }
@@ -339,6 +359,8 @@ namespace Poker.Runtime
                     : "같은 네트워크의 친구에게 보내 주세요. 친구도 같은 네트워크 연결을 선택해야 해요.");
             if (previewNotice != null) Show(previewNotice, room == null);
             subtitle.text = (room?.SeatCapacity ?? SelectedCapacity) + "인 텍사스 홀덤";
+            if (screen != null && room?.Rules?.AccusationsEnabled == true)
+                screen.Root.Q<Label>(className: "omc-subtitle").text = "개발용 · 방장 수동 카드 처리 / 실제 AI·고발 정산 없음";
             roomRules.text = room == null
                 ? TrySetupConfig(out var previewConfig, out _) ? SelectedCapacity + "인 방 · 처음 " + previewConfig.StartingStack
                     + "칩 · 블라인드 " + previewConfig.SmallBlind + "/" + previewConfig.BigBlind : "참가자는 방장 설정을 따라요."
@@ -347,6 +369,8 @@ namespace Poker.Runtime
                     + "\n공용 카드: " + (room.Rules.WaitsForHostDeal ? "방장이 공개" : "자동 공개")
                     + (room.Rules.PausesAfterReveal ? " · 확인 후 방장이 계속" : " · 별도 확인 없이 계속")
                     + "\n멘트: " + KoreanPokerText.UtteranceVisibilityDescription(room.Rules);
+            if (room?.Rules?.AccusationsEnabled == true)
+                roomRules.text += "\n개발용 고발 테스트 · 실제 AI·고발 정산 없음";
             Show(lanPicker, lan.value && !session);
             refreshAddresses.SetEnabled(!session); localAddress.SetEnabled(!session && localAddresses.Length > 0);
             UpdateAddressChoice();
@@ -446,6 +470,7 @@ namespace Poker.Runtime
         }
         private void ReturnHome()
         {
+            dealerDebug?.Dispose(); dealerDebug = null;
             screen?.Dispose(); screen = null; tableSurface.Clear(); connection.CloseSession();
             rematchOpen = false;
             copyFeedback = "";
@@ -465,6 +490,7 @@ namespace Poker.Runtime
         private void OnDisable()
         {
             DetachApplicationExitGuard();
+            dealerDebug?.Dispose(); dealerDebug = null;
             screen?.Dispose(); screen = null; connection?.Dispose(); connection = null;
             root?.Clear();
             if (ownsBackground)

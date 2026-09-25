@@ -43,6 +43,7 @@ namespace Poker.Runtime.Tests
         [UnityTearDown]
         public IEnumerator Cleanup()
         {
+            foreach (var guest in debugGuests) guest.Dispose(); debugGuests.Clear();
             peer?.Dispose(); peer = null;
             if (owner != null) UnityEngine.Object.Destroy(owner);
             yield return null;

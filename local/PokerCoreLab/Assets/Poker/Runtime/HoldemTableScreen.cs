@@ -72,7 +72,8 @@ namespace Poker.Runtime
         private bool ModalOpen => helpOpen || resetOpen || optionsOpen || potDetailsOpen || historyOpen || menuOpen;
         private bool NetworkCanSend => remote == null || remote.CanSend;
         private bool HostControls => remote == null || remote.IsHost;
-        private bool CanReleaseDeal => dealUnchanged != null || remote?.IsHost == true;
+        private readonly bool hostDealerControlled;
+        private bool CanReleaseDeal => dealUnchanged != null || remote?.IsHost == true && !hostDealerControlled;
         private bool CanResumeReveal => resumeReveal != null || remote?.IsHost == true;
         public VisualElement Root => root;
 
@@ -101,10 +102,11 @@ namespace Poker.Runtime
             Initialize(font);
         }
 
-        public HoldemTableScreen(VisualElement root, IHoldemRemoteTablePort remote, Font font)
+        public HoldemTableScreen(VisualElement root, IHoldemRemoteTablePort remote, Font font, bool hostDealerControlled = false)
         {
             this.root = root ?? throw new ArgumentNullException(nameof(root));
             this.remote = remote ?? throw new ArgumentNullException(nameof(remote));
+            this.hostDealerControlled = hostDealerControlled;
             remoteAccusations = remote as IHoldemRemoteAccusationPort;
             connectionPresence = remote as IHoldemConnectionPresence;
             roomInfo = remote as IHoldemRoomInfoSource;

@@ -3,6 +3,11 @@
 .omc-dealer-debug Label { flex-grow: 1; flex-shrink: 1; min-width: 0; font-size: 13px; white-space: normal; }
 .omc-dealer-debug-actions { flex-direction: row; flex-shrink: 0; justify-content: center; }
 .omc-dealer-debug-actions Button { height: 30px; min-height: 30px; margin: 4px; font-size: 14px; }
+.omc-multiplayer-dealer-debug { flex-direction: row; align-items: center; }
+.omc-multiplayer-dealer-debug #omc-debug-source { min-width: 125px; max-width: 180px; height: 30px; min-height: 30px; margin: 4px; }
+.omc-multiplayer-dealer-debug #omc-debug-source .unity-base-popup-field__input { background-color: #273d3e; color: #eee9d9; }
+.omc-multiplayer-dealer-debug #omc-debug-source .unity-base-popup-field__text { height: 20px; min-height: 20px; margin: 0; padding: 0; align-self: center; white-space: nowrap; -unity-text-align: middle-left; }
+.omc-multiplayer-dealer-debug .omc-dealer-debug-actions { flex-wrap: wrap; }
 .dealer-debug-table .omc-header { height: 64px; }
 .dealer-debug-table.compact .omc-header { height: 56px; }
 .dealer-debug-table.without-amount .omc-controls { height: 84px; }
@@ -156,6 +161,8 @@ Button:disabled { opacity: 0.35; }
 .remote-table .omc-last { padding-top: 0; padding-bottom: 0; margin-top: 1px; margin-bottom: 1px; }
 .remote-table.without-amount .omc-controls { height: 110px; }
 .remote-table.without-amount.compact .omc-controls { height: 100px; }
+.remote-table.dealer-debug-table.without-amount.compact .omc-controls { height: 92px; }
+.remote-table.dealer-debug-table.compact .omc-table { min-height: 345px; }
 .remote-table .omc-stack.long-amount { font-size: 12px; white-space: normal; }
 .remote-table.multi-seat .omc-opponent .omc-stack.long-amount { font-size: 12px; }
 .remote-table .omc-seat-status { white-space: normal; }
