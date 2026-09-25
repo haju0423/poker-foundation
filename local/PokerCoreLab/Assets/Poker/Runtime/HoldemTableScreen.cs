@@ -26,9 +26,12 @@ namespace Poker.Runtime
         private readonly Action returnToMenu;
         private readonly Func<HoldemRevealCommand, HoldemReceipt> resumeReveal;
         private readonly Func<HoldemDealCommand, HoldemReceipt> dealUnchanged;
+        private readonly string dealPendingPrompt;
         private readonly IHoldemAccusationPlayerPort accusationPort;
         private readonly IHoldemUtterancePlayerPort utterancePort;
         private readonly IHoldemPublicUtteranceSource publicUtteranceSource;
+        private bool PublishesUtterances => roomInfo?.RoomRules?.PublishesUtterances == true
+            || remote == null && publicUtteranceSource?.ReadPublicUtterances() != null;
         private HoldemPublicUtterances publicRemarks;
         private HoldemUtteranceComposer utteranceComposer;
         private readonly HoldemTableOptions options;
@@ -76,17 +79,19 @@ namespace Poker.Runtime
             Action abandonSession = null, Func<HoldemRevealCommand, HoldemReceipt> resumeReveal = null,
             HoldemTableOptions options = null, Action<HoldemTableOptions> configureTable = null,
             Func<HoldemDealCommand, HoldemReceipt> dealUnchanged = null,
-            IHoldemUtterancePlayerPort utterancePort = null, Action returnToMenu = null)
+            IHoldemUtterancePlayerPort utterancePort = null, Action returnToMenu = null, string dealPendingPrompt = null)
         {
             this.root = root ?? throw new ArgumentNullException(nameof(root));
             this.port = port ?? throw new ArgumentNullException(nameof(port));
             historyPort = port as IHoldemHistoryPort;
+            publicUtteranceSource = port as IHoldemPublicUtteranceSource;
             accusationPort = port as IHoldemAccusationPlayerPort;
             this.restart = restart ?? throw new ArgumentNullException(nameof(restart));
             this.abandonSession = abandonSession;
             this.returnToMenu = returnToMenu;
             this.resumeReveal = resumeReveal;
             this.dealUnchanged = dealUnchanged;
+            this.dealPendingPrompt = dealPendingPrompt;
             this.utterancePort = utterancePort;
             this.options = options;
             this.configureTable = configureTable;
@@ -114,7 +119,7 @@ namespace Poker.Runtime
             if (sheet == null || font == null) throw new InvalidOperationException("Hold'em UI resources are missing.");
             root.Clear(); root.AddToClassList("omc-root");
             root.EnableInClassList("with-utterance", utterancePort != null);
-            root.EnableInClassList("with-public-speech", roomInfo?.RoomRules?.PublishesUtterances == true);
+            root.EnableInClassList("with-public-speech", PublishesUtterances);
             root.EnableInClassList("remote-table", remote != null);
             root.style.unityFont = font; if (!root.styleSheets.Contains(sheet)) root.styleSheets.Add(sheet);
             root.RegisterCallback<GeometryChangedEvent>(OnGeometry);
@@ -167,7 +172,7 @@ namespace Poker.Runtime
             seatWidgets.Add(ownWidgets);
             if (utterancePort != null)
                 utteranceComposer = new HoldemUtteranceComposer(ownWidgets.Box, utterancePort,
-                    () => !disposed && !paused && !ModalOpen, roomInfo?.RoomRules?.PublishesUtterances == true);
+                    () => !disposed && !paused && !ModalOpen, PublishesUtterances);
             var controls = Box("omc-controls", root);
             prompt = Text("", "omc-prompt"); controls.Add(prompt);
             accusationRow = Box("omc-actions", controls); accusationRow.name = "omc-accusations";
@@ -557,8 +562,8 @@ namespace Poker.Runtime
             Show(retry, paused || remote?.NeedsRefresh == true);
             retry.text = remote != null ? remote.RefreshLabel : "화면 다시 확인";
             prompt.text = pending ? KoreanPokerText.SplitRemainderPrompt
-                : view.IsDealPending ? (!CanReleaseDeal ? KoreanPokerText.CommandErrorMessage(HoldemCommandError.DealPending)
-                    : "공개 버튼을 누르면 다음 공용 카드가 나와요.")
+                : view.IsDealPending ? (dealPendingPrompt ?? (!CanReleaseDeal ? KoreanPokerText.CommandErrorMessage(HoldemCommandError.DealPending)
+                    : "공개 버튼을 누르면 다음 공용 카드가 나와요."))
                 : view.IsRevealPending ? RevealPrompt()
                 : complete ? (view.IsOver ? (view.OwnStack > 0 ? "모든 칩을 가져왔어요!" : "테이블 승부가 끝났어요.")
                     : view.OwnStack == 0 ? "칩을 모두 잃었어요. 다음 판은 관전할 수 있어요." : "현재 보유 칩으로 다음 판을 시작해요. 블라인드는 새로 내요.")
@@ -747,7 +752,7 @@ namespace Poker.Runtime
         {
             var box = Box(own ? "omc-player" : "omc-opponent", parent); box.AddToClassList("omc-seat");
             box.name = "omc-seat-" + seat.Value;
-            bool publicSpeech = !own && roomInfo?.RoomRules?.PublishesUtterances == true;
+            bool publicSpeech = !own && PublishesUtterances;
             box.EnableInClassList("with-public-utterance", publicSpeech);
             var body = publicSpeech ? Box("omc-seat-body", box) : box;
             var info = Box("omc-seat-info", body);

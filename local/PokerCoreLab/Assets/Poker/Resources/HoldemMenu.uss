@@ -6,3 +6,5 @@
 .omc-menu Button:hover { background-color: rgb(59, 97, 94); }
 .omc-menu Button:focus { border-color: rgb(220, 195, 118); border-width: 2px; }
 .omc-menu-hint { font-size: 15px; -unity-text-align: middle-center; white-space: normal; color: rgb(183, 198, 195); margin-top: 8px; margin-bottom: 24px; }
+.omc-menu Foldout { margin-top: 8px; color: rgb(183, 198, 195); }
+.omc-menu Foldout Button { min-height: 44px; font-size: 18px; margin-top: 10px; }

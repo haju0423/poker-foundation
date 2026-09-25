@@ -9,7 +9,7 @@ using UnityEngine.UIElements;
 
 namespace Poker.Runtime.Tests
 {
-    public sealed class HoldemAppPlayModeTests
+    public sealed partial class HoldemAppPlayModeTests
     {
         private GameObject owner;
         private HoldemAppBootstrap app;
@@ -29,7 +29,8 @@ namespace Poker.Runtime.Tests
             panel = ScriptableObject.CreateInstance<PanelSettings>();
             panel.themeStyleSheet = Resources.Load<ThemeStyleSheet>("PokerTheme");
             panel.scaleMode = PanelScaleMode.ConstantPixelSize;
-            texture = new RenderTexture(1200, 800, 0); texture.Create(); panel.targetTexture = texture;
+            // Rounded overflow clips need a stencil buffer, as on the actual screen-space panel.
+            texture = new RenderTexture(1200, 800, 24); texture.Create(); panel.targetTexture = texture;
             solo = ScriptableObject.CreateInstance<HoldemTableSettings>(); solo.opponentDelaySeconds = 0.1f;
             multi = ScriptableObject.CreateInstance<HoldemMultiplayerSettings>();
             owner = new GameObject("Unified game test"); owner.SetActive(false);

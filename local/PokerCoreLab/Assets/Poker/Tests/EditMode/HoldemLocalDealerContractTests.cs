@@ -18,6 +18,31 @@ namespace Poker.Foundation.Tests
                     HoldemCardSourceScope.UndealtOutsideCurrentHandRunout) : HoldemDealerSelection.Unchanged();
         }
 
+        [TestCase(HoldemUtteranceVisibility.PublicRaw, true)]
+        [TestCase(HoldemUtteranceVisibility.OwnOnly, false)]
+        public void LocalPlayerPublicTranscriptHonorsVisibilityPolicy(HoldemUtteranceVisibility visibility, bool exposed)
+        {
+            var table = new HoldemLocalTable(new HoldemConfig(100, 1, 2), 4, new Ordered(), new Ordered(), new Passive(),
+                HoldemOddChipRule.ClockwiseFromButton, new HoldemUtterancePolicy(64, 1, HoldemUtteranceSeats.Active, visibility));
+            var speech = table.HumanUtterances.ReadUtterances();
+            Assert.That(table.HumanUtterances.SubmitUtterance(new HoldemUtteranceCommand(speech.SessionId,
+                speech.HandId, speech.WindowId, Guid.NewGuid(), speech.Street, speech.ViewerSeat, "테스트 멘트")).Accepted, Is.True);
+            var transcript = ((IHoldemPublicUtteranceSource)table.Human).ReadPublicUtterances();
+            Assert.That(transcript != null, Is.EqualTo(exposed));
+            if (exposed)
+            {
+                Assert.That(transcript.Count, Is.EqualTo(1));
+                Assert.That(transcript.GetEntry(0).Text, Is.EqualTo("테스트 멘트"));
+            }
+        }
+
+        [Test]
+        public void LocalPlayerWithoutSpeechPolicyHasNoPublicTranscript()
+        {
+            var table = new HoldemLocalTable(new HoldemConfig(100, 1, 2), 4, new Ordered(), new Ordered(), new Passive());
+            Assert.That(((IHoldemPublicUtteranceSource)table.Human).ReadPublicUtterances(), Is.Null);
+        }
+
         [Test]
         public void PublicOnlyLocalTableCannotChangeCardsByPassingAKnownUtteranceDirectly()
         {

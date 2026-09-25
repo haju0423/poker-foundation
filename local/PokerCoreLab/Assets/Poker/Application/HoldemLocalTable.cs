@@ -241,12 +241,14 @@ namespace Poker.Application
             return historySnapshot;
         }
 
-        private sealed class HumanPort : IHoldemPlayerPort, IHoldemAccusationPlayerPort, IHoldemHistoryPort, IHoldemOwnCardChangeSource
+        private sealed class HumanPort : IHoldemPlayerPort, IHoldemAccusationPlayerPort, IHoldemHistoryPort, IHoldemOwnCardChangeSource,
+            IHoldemPublicUtteranceSource
         {
             private readonly HoldemLocalTable table;
             public HumanPort(HoldemLocalTable table) { this.table = table; }
             public HoldemSnapshot Read() => table.session.GetSnapshot(table.humanSeat);
             public HoldemOwnCardChange ReadOwnCardChange() => table.ReadHumanCardChange();
+            public HoldemPublicUtterances ReadPublicUtterances() => table.utterances?.ReadPublicUtterances();
             public HoldemActionNotice LastAction => table.lastAction;
             public HoldemHandHistory ReadHistory() => table.ReadHistory();
             public HoldemReceipt Submit(HoldemCommand command) => table.Apply(table.humanSeat, command);

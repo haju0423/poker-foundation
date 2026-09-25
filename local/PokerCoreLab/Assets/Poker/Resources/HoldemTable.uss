@@ -1,4 +1,13 @@
 .omc-root { flex-grow: 1; background-color: #101a21; color: #f1eddf; padding: 16px 32px; font-size: 17px; }
+.omc-dealer-debug { flex-direction: row; align-items: center; flex-shrink: 0; padding: 5px 8px; background-color: #293e43; border-radius: 5px; margin-bottom: 5px; }
+.omc-dealer-debug Label { flex-grow: 1; flex-shrink: 1; min-width: 0; font-size: 13px; white-space: normal; }
+.omc-dealer-debug-actions { flex-direction: row; flex-shrink: 0; justify-content: center; }
+.omc-dealer-debug-actions Button { height: 30px; min-height: 30px; margin: 4px; font-size: 14px; }
+.dealer-debug-table .omc-header { height: 64px; }
+.dealer-debug-table.compact .omc-header { height: 56px; }
+.dealer-debug-table.without-amount .omc-controls { height: 84px; }
+.dealer-debug-table.compact .omc-player .omc-card { height: 70px; width: 56px; }
+.dealer-debug-table .omc-seat-info > Label, .dealer-debug-table .omc-hand-label, .dealer-debug-table .omc-pot, .dealer-debug-table .omc-last { padding-top: 0; padding-bottom: 0; margin-top: 1px; margin-bottom: 1px; }
 .omc-header { flex-direction: row; align-items: center; justify-content: space-between; height: 54px; flex-shrink: 0; }
 .omc-title { font-size: 28px; -unity-font-style: bold; }
 .omc-subtitle { font-size: 12px; color: #91aba7; margin-top: 3px; }
@@ -150,10 +159,11 @@ Button:disabled { opacity: 0.35; }
 .remote-table .omc-stack.long-amount { font-size: 12px; white-space: normal; }
 .remote-table.multi-seat .omc-opponent .omc-stack.long-amount { font-size: 12px; }
 .remote-table .omc-seat-status { white-space: normal; }
-.remote-table .omc-seat.with-public-utterance { flex-direction: column; align-items: stretch; width: 246px; max-width: 31%; min-width: 0; }
-.remote-table.compact .omc-seat.with-public-utterance { width: 218px; }
+.with-public-speech .omc-seat.with-public-utterance { flex-direction: column; align-items: stretch; width: 246px; max-width: 31%; min-width: 0; }
+.with-public-speech.compact .omc-seat.with-public-utterance { width: 218px; }
 .omc-seat-body { flex-direction: row; align-items: center; justify-content: center; }
 .omc-public-utterance { height: 25px; min-width: 0; flex-shrink: 0; margin: 5px 0 0 0; padding: 2px 5px; font-size: 12px; color: #d6e3d9; background-color: #193a32; background-image: none; border-width: 1px; border-color: #48685a; -unity-text-align: middle-left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.omc-own-change { margin: 0; padding: 0 2px; height: 14px; flex-shrink: 0; }
 .compact .omc-public-utterance { height: 20px; margin-top: 2px; padding-top: 0; padding-bottom: 0; font-size: 11px; }
 .remote-table.with-public-speech.compact .omc-player .omc-card { height: 70px; width: 56px; }
 .remote-table .omc-amount-hint { max-width: 250px; white-space: normal; padding-top: 0; padding-bottom: 0; margin-top: 0; margin-bottom: 0; }

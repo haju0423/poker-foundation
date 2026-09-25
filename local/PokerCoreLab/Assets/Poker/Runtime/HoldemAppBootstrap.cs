@@ -37,6 +37,7 @@ namespace Poker.Runtime
                 string requested = Argument("-omc-start-mode");
                 if (HoldemMultiplayerProcessCheck.IsRequested || requested == "multiplayer") StartMode(true, menuGeneration);
                 else if (requested == "solo") StartMode(false, menuGeneration);
+                else if (requested == "dealer-test") StartMode(false, menuGeneration, true);
                 else if (Array.IndexOf(Environment.GetCommandLineArgs(), "-omc-check-startup") >= 0)
                 { Debug.Log("OMC_APP_STARTUP_OK mode=menu"); UnityEngine.Application.Quit(0); }
             }
@@ -65,6 +66,10 @@ namespace Poker.Runtime
             var subtitle = new Label("텍사스 홀덤"); subtitle.AddToClassList("omc-menu-subtitle"); card.Add(subtitle);
             Choice(card, "혼자 하기", "omc-menu-solo", "NPC와 플레이 · 상대 수와 속도 조절", () => StartMode(false, generation));
             Choice(card, "함께 하기", "omc-menu-multiplayer", "3~4인 · 같은 네트워크에서 방 만들기 / 참가", () => StartMode(true, generation));
+            var development = new Foldout { text = "개발용 검사", value = false, name = "omc-menu-development" };
+            card.Add(development);
+            Choice(development, "카드 변경 테스트", "omc-menu-dealer-test", "고정 카드 · 수동 테스트 딜러 · 실제 AI 아님",
+                () => StartMode(false, generation, true));
         }
 
         private static void Choice(VisualElement parent, string label, string name, string description, Action action)
@@ -73,7 +78,7 @@ namespace Poker.Runtime
             var hint = new Label(description); hint.AddToClassList("omc-menu-hint"); parent.Add(hint);
         }
 
-        private void StartMode(bool multiplayer, int generation)
+        private void StartMode(bool multiplayer, int generation, bool dealerDebug = false)
         {
             if (!isActiveAndEnabled || modeObject != null || generation != menuGeneration) return;
             var candidate = CreateSurface(multiplayer ? "Multiplayer" : "Solo", out _);
@@ -87,6 +92,7 @@ namespace Poker.Runtime
             {
                 var bootstrap = candidate.AddComponent<HoldemTableBootstrap>();
                 bootstrap.Settings = soloSettings;
+                bootstrap.EnableDealerDebug = dealerDebug;
                 bootstrap.ReturnToMenu = () => ReturnToMenu(candidate);
             }
             modeObject = candidate;
